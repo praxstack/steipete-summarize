@@ -42,6 +42,7 @@ import {
 } from "./pickers";
 import { createSlideImageLoader, normalizeSlideImageUrl } from "./slide-images";
 import { createSlidesHydrator } from "./slides-hydrator";
+import { hasResolvedSlidesPayload } from "./slides-pending";
 import { createStreamController } from "./stream-controller";
 
 type PanelToBg =
@@ -307,6 +308,7 @@ let slidesContextRequestId = 0;
 let slidesContextPending = false;
 let slidesContextUrl: string | null = null;
 let slidesSeededSourceId: string | null = null;
+let slidesAppliedRunId: string | null = null;
 let slidesSummaryRunId: string | null = null;
 let slidesSummaryUrl: string | null = null;
 let slidesSummaryMarkdown = "";
@@ -380,6 +382,12 @@ function stopSlidesSummaryStream() {
   slideSummarySource = null;
 }
 
+function resolveActiveSlidesRunId(): string | null {
+  if (panelState.slidesRunId) return panelState.slidesRunId;
+  if (!slidesParallelValue && panelState.runId) return panelState.runId;
+  return null;
+}
+
 function maybeStartPendingSlidesForUrl(url: string | null) {
   if (!url) return;
   const key = normalizeUrl(url);
@@ -389,7 +397,7 @@ function maybeStartPendingSlidesForUrl(url: string | null) {
   const effectiveInputMode = inputModeOverride ?? inputMode;
   if (effectiveInputMode !== "video") return;
   if (slidesHydrator.isStreaming()) return;
-  if (panelState.slides && panelState.slides.slides.length > 0) return;
+  if (hasResolvedSlidesPayload(panelState.slides, slidesSeededSourceId)) return;
   pendingSlidesRunsByUrl.delete(key);
   startSlidesStreamForRunId(pending.runId);
   startSlidesSummaryStreamForRunId(pending.runId, pending.url);
@@ -676,7 +684,7 @@ function handleSlidesTextModeChange(next: SlideTextMode) {
 function retrySlidesStream() {
   if (!slidesEnabledValue) return;
   hideSlideNotice();
-  const runId = panelState.slidesRunId ?? panelState.runId;
+  const runId = resolveActiveSlidesRunId();
   const targetUrl = panelState.currentSource?.url ?? activeTabUrl ?? null;
   if (runId) {
     startSlidesStreamForRunId(runId);
@@ -1098,6 +1106,7 @@ function resetSummaryView({
   slideTitleByIndex = new Map();
   slideSummarySource = null;
   slidesSeededSourceId = null;
+  slidesAppliedRunId = null;
   if (stopSlides) {
     stopSlidesStream();
   }
@@ -1124,6 +1133,7 @@ function buildPanelCachePayload(): PanelCachePayload | null {
   const tabId = currentRunTabId ?? activeTabId;
   const url = panelState.currentSource?.url ?? activeTabUrl;
   if (!tabId || !url) return null;
+  const hasSlidesSummaryState = Boolean(slidesSummaryRunId || slidesSummaryMarkdown.trim());
   return {
     tabId,
     url,
@@ -1132,6 +1142,9 @@ function buildPanelCachePayload(): PanelCachePayload | null {
     slidesRunId: panelState.slidesRunId ?? null,
     summaryMarkdown: panelState.summaryMarkdown ?? null,
     summaryFromCache: panelState.summaryFromCache ?? null,
+    slidesSummaryMarkdown: slidesSummaryMarkdown || null,
+    slidesSummaryComplete: hasSlidesSummaryState ? slidesSummaryComplete : null,
+    slidesSummaryModel: hasSlidesSummaryState ? slidesSummaryModel : null,
     lastMeta: panelState.lastMeta,
     slides: panelState.slides ?? null,
     transcriptTimedText: slidesTranscriptTimedText ?? null,
@@ -1142,11 +1155,22 @@ function applyPanelCache(payload: PanelCachePayload, opts?: { preserveChat?: boo
   const preserveChat = opts?.preserveChat ?? false;
   resetSummaryView({ preserveChat });
   panelState.runId = payload.runId ?? null;
-  panelState.slidesRunId = payload.slidesRunId ?? payload.runId ?? null;
+  panelState.slidesRunId =
+    payload.slidesRunId ?? (slidesParallelValue ? null : (payload.runId ?? null));
   currentRunTabId = payload.tabId;
   panelState.currentSource = { url: payload.url, title: payload.title ?? null };
   panelState.lastMeta = payload.lastMeta ?? { inputSummary: null, model: null, modelLabel: null };
   panelState.summaryFromCache = payload.summaryFromCache ?? null;
+  slidesSummaryMarkdown = payload.slidesSummaryMarkdown ?? "";
+  slidesSummaryPending = null;
+  slidesSummaryHadError = false;
+  slidesSummaryComplete =
+    payload.slidesSummaryComplete ?? Boolean((payload.slidesSummaryMarkdown ?? "").trim());
+  slidesSummaryModel =
+    payload.slidesSummaryModel ??
+    panelState.lastMeta.model ??
+    panelState.ui?.settings.model ??
+    null;
   headerController.setBaseTitle(payload.title || payload.url || "Summarize");
   headerController.setBaseSubtitle(
     buildIdleSubtitle({
@@ -1174,17 +1198,25 @@ function applyPanelCache(payload: PanelCachePayload, opts?: { preserveChat?: boo
     if (!slidesTranscriptAvailable) {
       void requestSlidesContext();
     }
+    slidesAppliedRunId = resolveActiveSlidesRunId();
   } else {
     panelState.slides = null;
     slidesContextPending = false;
     slidesContextUrl = null;
     updateSlidesTextState();
+    slidesAppliedRunId = null;
   }
   slidesHydrator.syncFromCache({
     runId: panelState.slidesRunId ?? null,
     summaryFromCache: payload.summaryFromCache,
     hasSlides: Boolean(payload.slides && payload.slides.slides.length > 0),
   });
+  if (slidesSummaryMarkdown.trim()) {
+    updateSlideSummaryFromMarkdown(slidesSummaryMarkdown, {
+      preserveIfEmpty: false,
+      source: "slides",
+    });
+  }
   if (payload.summaryMarkdown) {
     renderMarkdown(payload.summaryMarkdown);
   } else {
@@ -1649,6 +1681,7 @@ function bindSlideSeek(el: HTMLElement, timestamp: number | null | undefined) {
 
 function applySlidesPayload(data: SseSlidesData) {
   const isSameSource = Boolean(panelState.slides && panelState.slides.sourceId === data.sourceId);
+  const activeSlidesRunId = resolveActiveSlidesRunId();
   const normalized: SseSlidesData = {
     ...data,
     slides: data.slides.map((slide) => ({
@@ -1657,15 +1690,26 @@ function applySlidesPayload(data: SseSlidesData) {
     })),
   };
   const shouldReplaceSeeded = slidesSeededSourceId === data.sourceId;
+  const shouldReplaceForRun = Boolean(
+    activeSlidesRunId && slidesAppliedRunId !== activeSlidesRunId,
+  );
   const merged =
-    !panelState.slides || shouldReplaceSeeded
+    !panelState.slides || shouldReplaceSeeded || shouldReplaceForRun
       ? normalized
       : mergeSlidesPayload(panelState.slides, normalized);
   if (shouldReplaceSeeded) {
     slidesSeededSourceId = null;
   }
-  if (!slidesPayloadChanged(panelState.slides, merged)) return;
+  if (!slidesPayloadChanged(panelState.slides, merged)) {
+    if (activeSlidesRunId) {
+      slidesAppliedRunId = activeSlidesRunId;
+    }
+    return;
+  }
   panelState.slides = merged;
+  if (activeSlidesRunId) {
+    slidesAppliedRunId = activeSlidesRunId;
+  }
   if (!isSameSource) {
     slidesContextPending = false;
     slidesContextUrl = null;
@@ -3697,7 +3741,7 @@ function handleBgMessage(msg: BgToPanel) {
       if (!msg.ok) {
         setSlidesBusy(false);
         if (msg.error) {
-          showSlideNotice(msg.error);
+          showSlideNotice(msg.error, { allowRetry: true });
         }
         return;
       }

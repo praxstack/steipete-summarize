@@ -14,6 +14,22 @@ function streamFromEvents(events: SseEvent[]) {
   });
 }
 
+function streamWithKeepaliveAndDone(delayMs: number, keepaliveEveryMs: number) {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`: keepalive ${Date.now()}\n\n`));
+      const keepalive = setInterval(() => {
+        controller.enqueue(encoder.encode(`: keepalive ${Date.now()}\n\n`));
+      }, keepaliveEveryMs);
+      setTimeout(() => {
+        clearInterval(keepalive);
+        controller.enqueue(encoder.encode(encodeSseEvent({ event: "done", data: {} })));
+        controller.close();
+      }, delayMs);
+    },
+  });
+}
+
 describe("sidepanel slides stream controller", () => {
   it("streams slides events and finishes on done", async () => {
     const slidesEvents: SseEvent[] = [
@@ -132,6 +148,32 @@ describe("sidepanel slides stream controller", () => {
     await controller.start("run-1");
 
     expect(errors.some((msg) => msg.includes("Timed out waiting"))).toBe(true);
+  });
+
+  it("does not time out on keepalive comments", async () => {
+    const errors: string[] = [];
+    let done = false;
+
+    const controller = createSlidesStreamController({
+      getToken: async () => "token",
+      onSlides: () => {},
+      onDone: () => {
+        done = true;
+      },
+      onError: (err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push(message);
+        return message;
+      },
+      fetchImpl: async () => new Response(streamWithKeepaliveAndDone(60, 10), { status: 200 }),
+      idleTimeoutMs: 25,
+      idleTimeoutMessage: "Timed out waiting for slide updates.",
+    });
+
+    await controller.start("run-1");
+
+    expect(done).toBe(true);
+    expect(errors).toEqual([]);
   });
 
   it("returns early when token is missing", async () => {

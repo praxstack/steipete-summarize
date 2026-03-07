@@ -36,7 +36,10 @@ export async function* parseSseStream(
         continue;
       }
 
-      if (line.startsWith(":")) continue;
+      if (line.startsWith(":")) {
+        yield { event: "__comment__", data: line.slice(1).trim() };
+        continue;
+      }
       if (line.startsWith("event:")) {
         currentEvent = line.slice("event:".length).trim() || "message";
         continue;

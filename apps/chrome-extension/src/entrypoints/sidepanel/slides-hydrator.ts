@@ -5,7 +5,7 @@ import {
 } from "./slides-stream-controller";
 
 export type SlidesHydrator = {
-  start: (runId: string) => Promise<void>;
+  start: (runId: string, opts?: { silent?: boolean }) => Promise<void>;
   stop: () => void;
   isStreaming: () => boolean;
   handlePayload: (payload: SseSlidesData) => void;
@@ -47,6 +47,8 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
   let hasSlidesPayload = false;
   let snapshotRequestId = 0;
   let snapshotInFlight = false;
+  let activeStartRequestId = 0;
+  let suppressStreamErrors = false;
 
   const setActiveRunId = (runId: string | null) => {
     activeRunId = runId;
@@ -94,7 +96,10 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
     getToken,
     onSlides: handlePayload,
     onStatus,
-    onError,
+    onError: (error) => {
+      if (suppressStreamErrors) return "";
+      return onError?.(error) ?? "";
+    },
     onDone: () => {
       if (!hasSlidesPayload) {
         void hydrateSnapshot("stream-done");
@@ -104,12 +109,23 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
     fetchImpl: streamFetchImpl,
   });
 
-  const start = async (runId: string) => {
+  const start = async (runId: string, opts?: { silent?: boolean }) => {
+    const requestId = activeStartRequestId + 1;
+    activeStartRequestId = requestId;
     setActiveRunId(runId);
-    await stream.start(runId);
+    suppressStreamErrors = Boolean(opts?.silent);
+    try {
+      await stream.start(runId);
+    } finally {
+      if (activeStartRequestId === requestId) {
+        suppressStreamErrors = false;
+      }
+    }
   };
 
   const stop = () => {
+    activeStartRequestId += 1;
+    suppressStreamErrors = false;
     setActiveRunId(null);
     stream.abort();
   };
@@ -137,6 +153,9 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
     if (hasSlides) {
       hasSlidesPayload = true;
       return;
+    }
+    if (!stream.isStreaming()) {
+      void start(runId, { silent: true });
     }
     if (summaryFromCache) {
       void hydrateSnapshot("summary-cache");

@@ -49,6 +49,8 @@ Dev (repo checkout):
 - “Stream ended unexpectedly” / empty chat response:
   - The daemon likely stopped mid-stream. Restart it, then click “Try again”.
   - `summarize daemon restart`
+- Slide strip/gallery missing after a parallel slide run failure:
+  - Click the slide notice “Try again” button. If the dedicated slide run never started, the extension now requests a fresh summarize+slides run instead of reusing the summary-only run.
 - Tweet video not transcribing / no progress:
   - Ensure `yt-dlp` is available on your PATH (or set `YT_DLP_PATH`) and you have a transcription provider (`whisper.cpp` installed or `OPENAI_API_KEY` / `FAL_KEY`).
   - Re-run `summarize daemon install --token <TOKEN>` to refresh the daemon env snapshot (launchd won’t inherit your shell PATH).

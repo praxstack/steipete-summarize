@@ -174,6 +174,9 @@ type PanelCachePayload = {
   slidesRunId: string | null;
   summaryMarkdown: string | null;
   summaryFromCache: boolean | null;
+  slidesSummaryMarkdown: string | null;
+  slidesSummaryComplete: boolean | null;
+  slidesSummaryModel: string | null;
   lastMeta: { inputSummary: string | null; model: string | null; modelLabel: string | null };
   slides: SseSlidesData | null;
   transcriptTimedText: string | null;

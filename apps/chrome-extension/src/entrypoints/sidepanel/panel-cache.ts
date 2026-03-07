@@ -14,6 +14,9 @@ export type PanelCachePayload = {
   slidesRunId: string | null;
   summaryMarkdown: string | null;
   summaryFromCache: boolean | null;
+  slidesSummaryMarkdown: string | null;
+  slidesSummaryComplete: boolean | null;
+  slidesSummaryModel: string | null;
   lastMeta: PanelCacheMeta;
   slides: SseSlidesData | null;
   transcriptTimedText: string | null;

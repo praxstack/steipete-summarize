@@ -8,6 +8,7 @@
 
 ### Fixes
 
+- Chrome extension: harden side-panel slides so SSE keepalives no longer false-time out, seeded placeholders no longer block pending/cached slide runs, retries can start a fresh summarize+slides run, and reruns replace stale slide state.
 - npm packaging: publish CLI with `pnpm publish` so `@steipete/summarize-core` is version-pinned in published metadata (no `workspace:*` in registry package).
 - Slides: detect WezTerm as an iTerm-compatible terminal for inline slide images in `--slides` mode. (#133) — thanks @doodaaatimmy-creator.
 - CLI help: surface `summarize refresh-free` in `summarize help` output.
