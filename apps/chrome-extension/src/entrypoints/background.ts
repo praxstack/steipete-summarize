@@ -10,6 +10,7 @@ import { canSummarizeUrl, extractFromTab, seekInTab } from "./background/content
 import { daemonHealth, daemonPing, friendlyFetchError } from "./background/daemon-client";
 import { ensureChatExtract, primeMediaHint, type CachedExtract } from "./background/extract-cache";
 import { createHoverController, type HoverToBg } from "./background/hover-controller";
+import { bindBackgroundListeners } from "./background/listeners";
 import { handlePanelAgentRequest, handlePanelChatHistoryRequest } from "./background/panel-chat";
 import { createPanelSessionStore, type PanelSession } from "./background/panel-session-store";
 import { resolvePanelState, type PanelUiState } from "./background/panel-state";
@@ -593,14 +594,12 @@ export default defineBackground(() => {
     }
   };
 
-  chrome.runtime.onConnect.addListener((port) => {
-    if (!port.name.startsWith("sidepanel:")) return;
-    const windowIdRaw = port.name.split(":")[1] ?? "";
-    const windowId = Number.parseInt(windowIdRaw, 10);
-    if (!Number.isFinite(windowId)) return;
-    const session = panelSessionStore.registerPanelSession(windowId, port);
-    port.onMessage.addListener((msg) => handlePanelMessage(session, msg as PanelToBg));
-    port.onDisconnect.addListener(() => {
+  bindBackgroundListeners({
+    panelSessionStore,
+    handlePanelMessage: (session, msg) => {
+      handlePanelMessage(session, msg as PanelToBg);
+    },
+    onPanelDisconnect: (session, port, windowId) => {
       if (session.port !== port) return;
       session.runController?.abort();
       session.runController = null;
@@ -611,73 +610,21 @@ export default defineBackground(() => {
       session.daemonRecovery.clearPending();
       panelSessionStore.deletePanelSession(windowId);
       void panelSessionStore.clearCachedExtractsForWindow(windowId);
-    });
-  });
-
-  chrome.runtime.onMessage.addListener(
-    (
-      raw: HoverToBg | NativeInputRequest | ArtifactsRequest,
-      sender,
-      sendResponse,
-    ): boolean | undefined => {
-      return (
-        runtimeActionsHandler(raw, sender, sendResponse) ??
-        hoverController.handleRuntimeMessage(raw, sender, sendResponse)
-      );
     },
-  );
-
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local") return;
-    if (!changes.settings) return;
-    for (const session of panelSessionStore.getPanelSessions()) {
-      void emitState(session, "");
-    }
-  });
-
-  chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
-    void (async () => {
-      const tab = await chrome.tabs.get(details.tabId).catch(() => null);
-      const windowId = tab?.windowId;
-      if (typeof windowId !== "number") return;
-      const session = panelSessionStore.getPanelSession(windowId);
-      if (!session) return;
-      const now = Date.now();
-      if (now - session.lastNavAt < 700) return;
-      session.lastNavAt = now;
-      void emitState(session, "");
-      void summarizeActiveTab(session, "spa-nav");
-    })();
-  });
-
-  chrome.tabs.onActivated.addListener((info) => {
-    const session = panelSessionStore.getPanelSession(info.windowId);
-    if (!session) return;
-    void emitState(session, "");
-    void summarizeActiveTab(session, "tab-activated");
-  });
-
-  chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
-    const windowId = tab?.windowId;
-    if (typeof windowId !== "number") return;
-    const session = panelSessionStore.getPanelSession(windowId);
-    if (!session) return;
-    if (typeof changeInfo.title === "string" || typeof changeInfo.url === "string") {
-      void emitState(session, "");
-    }
-    if (typeof changeInfo.url === "string") {
-      void summarizeActiveTab(session, "tab-url-change");
-    }
-    if (changeInfo.status === "complete") {
-      void emitState(session, "");
-      void summarizeActiveTab(session, "tab-updated");
-    }
-  });
-
-  chrome.tabs.onRemoved.addListener((tabId) => {
-    panelSessionStore.clearTab(tabId);
-    hoverController.abortHoverForTab(tabId);
-    nativeInputArmedTabs.delete(tabId);
+    runtimeActionsHandler: (raw, sender, sendResponse) =>
+      runtimeActionsHandler(raw as NativeInputRequest | ArtifactsRequest, sender, sendResponse),
+    hoverRuntimeHandler: (raw, sender, sendResponse) =>
+      hoverController.handleRuntimeMessage(raw as HoverToBg, sender, sendResponse),
+    emitState: (session, status) => {
+      void emitState(session, status);
+    },
+    summarizeActiveTab: (session, reason) => {
+      void summarizeActiveTab(session, reason);
+    },
+    onTabRemoved: (tabId) => {
+      hoverController.abortHoverForTab(tabId);
+      nativeInputArmedTabs.delete(tabId);
+    },
   });
 
   // Chrome: Auto-open side panel on toolbar icon click
