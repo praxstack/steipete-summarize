@@ -19,6 +19,7 @@ import {
 import { daemonHealth, daemonPing, friendlyFetchError } from "./background/daemon-client";
 import { createHoverController, type HoverToBg } from "./background/hover-controller";
 import { createPanelSessionStore, type PanelSession } from "./background/panel-session-store";
+import { resolvePanelState, type PanelUiState } from "./background/panel-state";
 import {
   buildSlidesText,
   getActiveTab,
@@ -67,7 +68,7 @@ type RunStart = {
 };
 
 type BgToPanel =
-  | { type: "ui:state"; state: UiState }
+  | { type: "ui:state"; state: PanelUiState }
   | { type: "ui:status"; status: string }
   | { type: "run:start"; run: RunStart }
   | { type: "run:error"; message: string }
@@ -89,30 +90,6 @@ type BgToPanel =
       error?: string;
     }
   | { type: "ui:cache"; requestId: string; ok: boolean; cache?: PanelCachePayload };
-
-type UiState = {
-  panelOpen: boolean;
-  daemon: { ok: boolean; authed: boolean; error?: string };
-  tab: { id: number | null; url: string | null; title: string | null };
-  media: { hasVideo: boolean; hasAudio: boolean; hasCaptions: boolean } | null;
-  stats: { pageWords: number | null; videoDurationSeconds: number | null };
-  settings: {
-    autoSummarize: boolean;
-    hoverSummaries: boolean;
-    chatEnabled: boolean;
-    automationEnabled: boolean;
-    slidesEnabled: boolean;
-    slidesParallel: boolean;
-    slidesOcrEnabled: boolean;
-    slidesLayout: "strip" | "gallery";
-    fontSize: number;
-    lineHeight: number;
-    model: string;
-    length: string;
-    tokenPresent: boolean;
-  };
-  status: string;
-};
 
 type SlidesPayload = {
   sourceUrl: string;
@@ -384,78 +361,31 @@ export default defineBackground(() => {
     status: string,
     opts?: { checkRecovery?: boolean },
   ) => {
-    const settings = await loadSettings();
-    const tab = await getActiveTab(session.windowId);
-    const token = settings.token.trim();
-    const [health, authed] = await Promise.all([
-      daemonHealth(),
-      token ? daemonPing(token) : Promise.resolve({ ok: false }),
-    ]);
-    const daemonReady = health.ok && authed.ok;
-    const pendingUrl = session.daemonRecovery.getPendingUrl();
-    const currentUrlMatches = Boolean(pendingUrl && tab?.url && urlsMatch(tab.url, pendingUrl));
-    const isIdle = !session.runController && !session.inflightUrl;
-    const cached = tab?.id ? panelSessionStore.getCachedExtract(tab.id, tab.url ?? null) : null;
-    let shouldRecover = false;
-    if (opts?.checkRecovery) {
-      shouldRecover = session.daemonRecovery.maybeRecover({
-        isReady: daemonReady,
-        currentUrlMatches,
-        isIdle,
-      });
-    } else {
-      session.daemonRecovery.updateStatus(daemonReady);
-    }
-    const daemon = session.daemonStatus.resolve(
-      { ok: health.ok, authed: authed.ok, error: health.error ?? authed.error },
-      {
-        keepReady: Boolean(session.runController || session.agentController || session.inflightUrl),
-      },
-    );
-    const state: UiState = {
-      panelOpen: panelSessionStore.isPanelOpen(session),
-      daemon,
-      tab: { id: tab?.id ?? null, url: tab?.url ?? null, title: tab?.title ?? null },
-      media: cached?.media ?? null,
-      stats: {
-        pageWords: typeof cached?.wordCount === "number" ? cached.wordCount : null,
-        videoDurationSeconds:
-          typeof cached?.mediaDurationSeconds === "number" ? cached.mediaDurationSeconds : null,
-      },
-      settings: {
-        autoSummarize: settings.autoSummarize,
-        hoverSummaries: settings.hoverSummaries,
-        chatEnabled: settings.chatEnabled,
-        automationEnabled: settings.automationEnabled,
-        slidesEnabled: settings.slidesEnabled,
-        slidesParallel: settings.slidesParallel,
-        slidesOcrEnabled: settings.slidesOcrEnabled,
-        slidesLayout: settings.slidesLayout,
-        fontSize: settings.fontSize,
-        lineHeight: settings.lineHeight,
-        model: settings.model,
-        length: settings.length,
-        tokenPresent: Boolean(settings.token.trim()),
-      },
+    const next = await resolvePanelState({
+      session,
       status,
-    };
-    void send(session, { type: "ui:state", state });
+      checkRecovery: opts?.checkRecovery,
+      loadSettings,
+      getActiveTab,
+      daemonHealth,
+      daemonPing,
+      panelSessionStore,
+      urlsMatch,
+      canSummarizeUrl,
+    });
+    void send(session, { type: "ui:state", state: next.state });
 
-    if (shouldRecover) {
+    if (next.shouldRecover) {
       void summarizeActiveTab(session, "daemon-recovered");
       return;
     }
 
-    if (pendingUrl && tab?.url && !currentUrlMatches) {
+    if (next.shouldClearPending) {
       session.daemonRecovery.clearPending();
     }
 
-    if (tab?.id && tab.url && canSummarizeUrl(tab.url)) {
-      void primeMediaHint(session, {
-        tabId: tab.id,
-        url: tab.url,
-        title: tab.title ?? null,
-      });
+    if (next.shouldPrimeMedia) {
+      void primeMediaHint(session, next.shouldPrimeMedia);
     }
   };
 
