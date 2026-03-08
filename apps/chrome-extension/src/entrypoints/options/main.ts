@@ -4,6 +4,7 @@ import { defaultSettings, loadSettings, saveSettings } from "../../lib/settings"
 import { applyTheme, type ColorMode, type ColorScheme } from "../../lib/theme";
 import { mountCheckbox } from "../../ui/zag-checkbox";
 import { createDaemonStatusChecker } from "./daemon-status";
+import { getOptionsElements } from "./elements";
 import { createLogsViewer } from "./logs-viewer";
 import { createModelPresetsController } from "./model-presets";
 import { mountOptionsPickers } from "./pickers";
@@ -14,80 +15,76 @@ import { createOptionsTabs } from "./tab-controller";
 declare const __SUMMARIZE_GIT_HASH__: string;
 declare const __SUMMARIZE_VERSION__: string;
 
-function byId<T extends HTMLElement>(id: string): T {
-  const el = document.getElementById(id);
-  if (!el) throw new Error(`Missing #${id}`);
-  return el as T;
-}
-
-const formEl = byId<HTMLFormElement>("form");
-const statusEl = byId<HTMLSpanElement>("status");
-
-const tokenEl = byId<HTMLInputElement>("token");
-const tokenCopyBtn = byId<HTMLButtonElement>("tokenCopy");
-const modelPresetEl = byId<HTMLSelectElement>("modelPreset");
-const modelCustomEl = byId<HTMLInputElement>("modelCustom");
-const languagePresetEl = byId<HTMLSelectElement>("languagePreset");
-const languageCustomEl = byId<HTMLInputElement>("languageCustom");
-const promptOverrideEl = byId<HTMLTextAreaElement>("promptOverride");
-const autoToggleRoot = byId<HTMLDivElement>("autoToggle");
-const maxCharsEl = byId<HTMLInputElement>("maxChars");
-const hoverPromptEl = byId<HTMLTextAreaElement>("hoverPrompt");
-const hoverPromptResetBtn = byId<HTMLButtonElement>("hoverPromptReset");
-const chatToggleRoot = byId<HTMLDivElement>("chatToggle");
-const automationToggleRoot = byId<HTMLDivElement>("automationToggle");
-const automationPermissionsBtn = byId<HTMLButtonElement>("automationPermissions");
-const userScriptsNoticeEl = byId<HTMLDivElement>("userScriptsNotice");
-const skillsExportBtn = byId<HTMLButtonElement>("skillsExport");
-const skillsImportBtn = byId<HTMLButtonElement>("skillsImport");
-const skillsSearchEl = byId<HTMLInputElement>("skillsSearch");
-const skillsListEl = byId<HTMLDivElement>("skillsList");
-const skillsEmptyEl = byId<HTMLDivElement>("skillsEmpty");
-const skillsConflictsEl = byId<HTMLDivElement>("skillsImportConflicts");
-const hoverSummariesToggleRoot = byId<HTMLDivElement>("hoverSummariesToggle");
-const summaryTimestampsToggleRoot = byId<HTMLDivElement>("summaryTimestampsToggle");
-const slidesParallelToggleRoot = byId<HTMLDivElement>("slidesParallelToggle");
-const slidesOcrToggleRoot = byId<HTMLDivElement>("slidesOcrToggle");
-const extendedLoggingToggleRoot = byId<HTMLDivElement>("extendedLoggingToggle");
-const autoCliFallbackToggleRoot = byId<HTMLDivElement>("autoCliFallbackToggle");
-const autoCliOrderEl = byId<HTMLInputElement>("autoCliOrder");
-const requestModeEl = byId<HTMLSelectElement>("requestMode");
-const firecrawlModeEl = byId<HTMLSelectElement>("firecrawlMode");
-const markdownModeEl = byId<HTMLSelectElement>("markdownMode");
-const preprocessModeEl = byId<HTMLSelectElement>("preprocessMode");
-const youtubeModeEl = byId<HTMLSelectElement>("youtubeMode");
-const transcriberEl = byId<HTMLSelectElement>("transcriber");
-const timeoutEl = byId<HTMLInputElement>("timeout");
-const retriesEl = byId<HTMLInputElement>("retries");
-const maxOutputTokensEl = byId<HTMLInputElement>("maxOutputTokens");
-const pickersRoot = byId<HTMLDivElement>("pickersRoot");
-const fontFamilyEl = byId<HTMLInputElement>("fontFamily");
-const fontSizeEl = byId<HTMLInputElement>("fontSize");
-const buildInfoEl = document.getElementById("buildInfo");
-const daemonStatusEl = byId<HTMLDivElement>("daemonStatus");
-const logsSourceEl = byId<HTMLSelectElement>("logsSource");
-const logsTailEl = byId<HTMLInputElement>("logsTail");
-const logsRefreshBtn = byId<HTMLButtonElement>("logsRefresh");
-const logsAutoEl = byId<HTMLInputElement>("logsAuto");
-const logsOutputEl = byId<HTMLDivElement>("logsOutput");
-const logsRawEl = byId<HTMLPreElement>("logsRaw");
-const logsTableEl = byId<HTMLTableElement>("logsTable");
-const logsParsedEl = byId<HTMLInputElement>("logsParsed");
-const logsMetaEl = byId<HTMLDivElement>("logsMeta");
-const processesRefreshBtn = byId<HTMLButtonElement>("processesRefresh");
-const processesAutoEl = byId<HTMLInputElement>("processesAuto");
-const processesShowCompletedEl = byId<HTMLInputElement>("processesShowCompleted");
-const processesLimitEl = byId<HTMLInputElement>("processesLimit");
-const processesStreamEl = byId<HTMLSelectElement>("processesStream");
-const processesTailEl = byId<HTMLInputElement>("processesTail");
-const processesMetaEl = byId<HTMLDivElement>("processesMeta");
-const processesTableEl = byId<HTMLTableElement>("processesTable");
-const processesLogsTitleEl = byId<HTMLDivElement>("processesLogsTitle");
-const processesLogsCopyBtn = byId<HTMLButtonElement>("processesLogsCopy");
-const processesLogsOutputEl = byId<HTMLPreElement>("processesLogsOutput");
-const tabsRoot = byId<HTMLDivElement>("tabs");
-const tabButtons = Array.from(tabsRoot.querySelectorAll<HTMLButtonElement>("[data-tab]"));
-const tabPanels = Array.from(document.querySelectorAll<HTMLElement>("[data-tab-panel]"));
+const {
+  formEl,
+  statusEl,
+  tokenEl,
+  tokenCopyBtn,
+  modelPresetEl,
+  modelCustomEl,
+  languagePresetEl,
+  languageCustomEl,
+  promptOverrideEl,
+  autoToggleRoot,
+  maxCharsEl,
+  hoverPromptEl,
+  hoverPromptResetBtn,
+  chatToggleRoot,
+  automationToggleRoot,
+  automationPermissionsBtn,
+  userScriptsNoticeEl,
+  skillsExportBtn,
+  skillsImportBtn,
+  skillsSearchEl,
+  skillsListEl,
+  skillsEmptyEl,
+  skillsConflictsEl,
+  hoverSummariesToggleRoot,
+  summaryTimestampsToggleRoot,
+  slidesParallelToggleRoot,
+  slidesOcrToggleRoot,
+  extendedLoggingToggleRoot,
+  autoCliFallbackToggleRoot,
+  autoCliOrderEl,
+  requestModeEl,
+  firecrawlModeEl,
+  markdownModeEl,
+  preprocessModeEl,
+  youtubeModeEl,
+  transcriberEl,
+  timeoutEl,
+  retriesEl,
+  maxOutputTokensEl,
+  pickersRoot,
+  fontFamilyEl,
+  fontSizeEl,
+  buildInfoEl,
+  daemonStatusEl,
+  logsSourceEl,
+  logsTailEl,
+  logsRefreshBtn,
+  logsAutoEl,
+  logsOutputEl,
+  logsRawEl,
+  logsTableEl,
+  logsParsedEl,
+  logsMetaEl,
+  processesRefreshBtn,
+  processesAutoEl,
+  processesShowCompletedEl,
+  processesLimitEl,
+  processesStreamEl,
+  processesTailEl,
+  processesMetaEl,
+  processesTableEl,
+  processesLogsTitleEl,
+  processesLogsCopyBtn,
+  processesLogsOutputEl,
+  tabsRoot,
+  tabButtons,
+  tabPanels,
+  logsLevelInputs,
+} = getOptionsElements();
 
 const tabStorageKey = "summarize:options-tab";
 
@@ -110,10 +107,6 @@ let saveSequence = 0;
 const setStatus = (text: string) => {
   statusEl.textContent = text;
 };
-
-const logsLevelInputs = Array.from(
-  document.querySelectorAll<HTMLInputElement>("input[data-log-level]"),
-);
 
 const logsViewer = createLogsViewer({
   elements: {
