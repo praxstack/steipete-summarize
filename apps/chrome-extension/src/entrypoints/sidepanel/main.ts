@@ -26,6 +26,7 @@ import {
 } from "./chat-history-store";
 import { createChatSession } from "./chat-session";
 import { type ChatHistoryLimits } from "./chat-state";
+import { createChatStreamRuntime } from "./chat-stream-runtime";
 import { createDrawerControls } from "./drawer-controls";
 import { createErrorController } from "./error-controller";
 import { createHeaderController } from "./header-controller";
@@ -417,7 +418,7 @@ function attachSummaryRun(run: RunStart) {
   lastAction = "summarize";
   window.clearTimeout(autoKickTimer);
   if (panelState.chatStreaming) {
-    finishStreamingMessage();
+    chatStreamRuntime.finishStreamingMessage();
   }
   const preserveChat = navigationRuntime.shouldPreserveChatForRun(run.url);
   if (!preserveChat) {
@@ -1792,7 +1793,7 @@ function handleBgMessage(msg: BgToPanel) {
       headerController.setStatus(`Error: ${detail}`);
       setPhase("error", { error: detail });
       if (panelState.chatStreaming) {
-        finishStreamingMessage();
+        chatStreamRuntime.finishStreamingMessage();
       }
     },
     handleSlidesRun: (slidesRun) => {
@@ -1980,13 +1981,6 @@ function resetChatState() {
   lastNavigationMessageUrl = null;
 }
 
-function finishStreamingMessage() {
-  panelState.chatStreaming = false;
-  chatInputEl.focus();
-  void persistChatHistory();
-  maybeSendQueuedChat();
-}
-
 async function runAgentLoop() {
   await runChatAgentLoop({
     automationEnabled: automationEnabledValue,
@@ -2004,71 +1998,48 @@ async function runAgentLoop() {
   });
 }
 
-function startChatMessage(text: string) {
-  const input = text.trim();
-  if (!input || !chatEnabledValue) return;
-
-  errorController.clearAll();
-  chatSession.resetAbort();
-
-  chatController.addMessage(wrapMessage({ role: "user", content: input, timestamp: Date.now() }));
-
-  panelState.chatStreaming = true;
-  metricsController.setActiveMode("chat");
-  scrollToBottom(true);
-  lastAction = "chat";
-
-  void (async () => {
-    try {
-      await runAgentLoop();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      headerController.setStatus(`Error: ${message}`);
-      errorController.showInlineError(message);
-    } finally {
-      finishStreamingMessage();
-    }
-  })();
-}
-
-function maybeSendQueuedChat() {
-  if (panelState.chatStreaming || !chatEnabledValue) return;
-  if (chatQueue.length === 0) {
-    renderChatQueue();
-    return;
-  }
-  const next = chatQueue.shift();
-  renderChatQueue();
-  if (next) startChatMessage(next.text);
-}
-
-function retryChat() {
-  if (!chatEnabledValue || panelState.chatStreaming) return;
-  if (!chatController.hasUserMessages()) return;
-
-  errorController.clearAll();
-  chatSession.resetAbort();
-  panelState.chatStreaming = true;
-  metricsController.setActiveMode("chat");
-  lastAction = "chat";
-  scrollToBottom(true);
-
-  void (async () => {
-    try {
-      await runAgentLoop();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      headerController.setStatus(`Error: ${message}`);
-      errorController.showInlineError(message);
-    } finally {
-      finishStreamingMessage();
-    }
-  })();
-}
+const chatStreamRuntime = createChatStreamRuntime({
+  chatEnabled: () => chatEnabledValue,
+  isChatStreaming: () => panelState.chatStreaming,
+  setChatStreaming: (value) => {
+    panelState.chatStreaming = value;
+  },
+  hasUserMessages: () => chatController.hasUserMessages(),
+  addUserMessage: (text) => {
+    chatController.addMessage(wrapMessage({ role: "user", content: text, timestamp: Date.now() }));
+  },
+  dequeueQueuedMessage: () => chatQueue.shift(),
+  getQueuedChatCount: () => chatQueue.length,
+  renderChatQueue,
+  focusInput: () => {
+    chatInputEl.focus();
+  },
+  clearErrors: () => {
+    errorController.clearAll();
+  },
+  resetAbort: () => {
+    chatSession.resetAbort();
+  },
+  metricsSetChatMode: () => {
+    metricsController.setActiveMode("chat");
+  },
+  setLastActionChat: () => {
+    lastAction = "chat";
+  },
+  scrollToBottom,
+  persistChatHistory,
+  setStatus: (value) => {
+    headerController.setStatus(value);
+  },
+  showInlineError: (message) => {
+    errorController.showInlineError(message);
+  },
+  executeAgentLoop: runAgentLoop,
+});
 
 function retryLastAction() {
   if (lastAction === "chat") {
-    retryChat();
+    chatStreamRuntime.retryChat();
     return;
   }
   sendSummarize({ refresh: true });
@@ -2090,12 +2061,12 @@ function sendChatMessage() {
       chatInputEl.value = rawInput;
       chatInputEl.style.height = `${Math.min(chatInputEl.scrollHeight, 120)}px`;
     } else if (!chatBusy) {
-      maybeSendQueuedChat();
+      chatStreamRuntime.maybeSendQueuedChat();
     }
     return;
   }
 
-  startChatMessage(input);
+  chatStreamRuntime.startChatMessage(input);
 }
 
 const bumpFontSize = (delta: number) => {
