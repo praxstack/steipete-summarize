@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.13.0 - UNRELEASED
+## 0.13.1 - UNRELEASED
+
+## 0.13.0 - 2026-04-08
 
 ### Features
 
