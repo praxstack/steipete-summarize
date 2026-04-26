@@ -5,6 +5,7 @@
 ### Fixes
 
 - CLI auto models: include config-provided environment values when selecting `auto` candidates, so API keys in `~/.summarize/config.json` are honored for URL summaries (#206, fixes #205, thanks @kaihendry and @solomonneas).
+- Chrome extension: skip always-on content scripts on Facebook, Instagram, and Meta CDN pages to avoid site compatibility issues (#208, fixes #106, thanks @solomonneas).
 
 ## 0.13.2 - 2026-04-26
 
