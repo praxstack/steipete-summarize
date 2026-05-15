@@ -9,6 +9,7 @@
 
 ### Fixes
 
+- Release gate: run `pnpm typecheck` during `pnpm check` so CI/release checks catch TypeScript errors.
 - Typecheck: include `packages/core` in the root typecheck script so core library errors fail the gate.
 - Tests: ignore invalid `VITEST_MAX_THREADS` overrides so Vitest never receives `maxThreads` below `minThreads`.
 - CLI version: stop baking a stale git SHA into the committed `dist/cli.js` wrapper so checkout builds report the current commit.

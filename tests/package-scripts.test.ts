@@ -7,6 +7,10 @@ const rootPackage = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as
 };
 
 describe("package scripts", () => {
+  it("runs typecheck during the root check gate", () => {
+    expect(rootPackage.scripts.check).toContain("pnpm typecheck");
+  });
+
   it("typechecks the core workspace package from the root script", () => {
     expect(rootPackage.scripts.typecheck).toContain("pnpm -C packages/core typecheck");
   });
