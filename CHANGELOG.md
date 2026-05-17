@@ -13,6 +13,7 @@
 - Chrome extension: keep stale model discovery responses from reverting newer token results or user-selected models.
 - Chrome extension options: keep stale daemon status checks from replacing the missing-token warning after the token field is cleared.
 - Chrome extension options: show save failures instead of leaving the form stuck on Saving.
+- YouTube transcripts: try same-language caption fallbacks when the preferred caption URL is blocked or dead.
 
 ## 0.15.2 - 2026-05-17
 
