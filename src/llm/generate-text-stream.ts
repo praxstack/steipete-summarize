@@ -34,6 +34,7 @@ export type StreamTextWithContextArgs = {
   anthropicBaseUrlOverride?: string | null;
   googleBaseUrlOverride?: string | null;
   xaiBaseUrlOverride?: string | null;
+  ollamaBaseUrlOverride?: string | null;
   forceChatCompletions?: boolean;
   requestOptions?: ModelRequestOptions;
 };
@@ -197,6 +198,7 @@ export async function streamTextWithContext({
   anthropicBaseUrlOverride,
   googleBaseUrlOverride,
   xaiBaseUrlOverride,
+  ollamaBaseUrlOverride,
   forceChatCompletions,
   requestOptions,
 }: StreamTextWithContextArgs): Promise<StreamTextResult> {
@@ -328,14 +330,18 @@ export async function streamTextWithContext({
       parsed.provider === "openai" ||
       parsed.provider === "zai" ||
       parsed.provider === "nvidia" ||
-      parsed.provider === "github-copilot"
+      parsed.provider === "github-copilot" ||
+      parsed.provider === "ollama"
     ) {
       const openaiConfig: OpenAiClientConfig = resolveOpenAiCompatibleClientConfigForProvider({
         provider: parsed.provider,
         openaiApiKey: apiKeys.openaiApiKey,
         openrouterApiKey: apiKeys.openrouterApiKey,
         forceOpenRouter,
-        openaiBaseUrlOverride,
+        openaiBaseUrlOverride:
+          parsed.provider === "ollama"
+            ? (ollamaBaseUrlOverride ?? openaiBaseUrlOverride)
+            : openaiBaseUrlOverride,
         forceChatCompletions,
         requestOptions,
       });

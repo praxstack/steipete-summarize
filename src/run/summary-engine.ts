@@ -53,6 +53,7 @@ export type SummaryEngineDeps = {
       | "zai"
       | "nvidia"
       | "github-copilot"
+      | "ollama"
       | "cli";
     model: string;
     usage: Awaited<ReturnType<typeof summarizeWithModelId>>["usage"] | null;
@@ -79,6 +80,9 @@ export type SummaryEngineDeps = {
   };
   nvidia: {
     apiKey: string | null;
+    baseUrl: string;
+  };
+  ollama: {
     baseUrl: string;
   };
   providerBaseUrls: {
@@ -115,6 +119,13 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         ...attempt,
         openaiApiKeyOverride: deps.nvidia.apiKey,
         openaiBaseUrlOverride: deps.nvidia.baseUrl,
+        forceChatCompletions: true,
+      };
+    }
+    if (modelIdLower.startsWith("ollama/")) {
+      return {
+        ...attempt,
+        openaiBaseUrlOverride: deps.ollama.baseUrl,
         forceChatCompletions: true,
       };
     }
@@ -172,6 +183,9 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
     }
     if (requiredEnv === "XAI_API_KEY") {
       return Boolean(deps.apiKeys.xaiApiKey);
+    }
+    if (requiredEnv === "OLLAMA_BASE_URL") {
+      return true;
     }
     return Boolean(deps.apiKeys.anthropicApiKey);
   };
@@ -356,6 +370,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         googleBaseUrlOverride: deps.providerBaseUrls.google,
         xaiBaseUrlOverride: deps.providerBaseUrls.xai,
         zaiBaseUrlOverride: deps.zai.baseUrl,
+        ollamaBaseUrlOverride: deps.ollama.baseUrl,
         forceChatCompletions,
         requestOptions,
         retries: deps.retries,
@@ -415,6 +430,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         googleBaseUrlOverride: deps.providerBaseUrls.google,
         xaiBaseUrlOverride: deps.providerBaseUrls.xai,
         zaiBaseUrlOverride: deps.zai.baseUrl,
+        ollamaBaseUrlOverride: deps.ollama.baseUrl,
         forceChatCompletions,
         requestOptions,
         retries: deps.retries,
@@ -466,6 +482,7 @@ export function createSummaryEngine(deps: SummaryEngineDeps) {
         anthropicBaseUrlOverride: deps.providerBaseUrls.anthropic,
         googleBaseUrlOverride: deps.providerBaseUrls.google,
         xaiBaseUrlOverride: deps.providerBaseUrls.xai,
+        ollamaBaseUrlOverride: deps.ollama.baseUrl,
         forceChatCompletions,
         requestOptions,
         prompt,
