@@ -15,36 +15,20 @@ function collectStream({ isTTY }: { isTTY: boolean }) {
 }
 
 // Deterministic spinner: start writes once, updates are no-ops.
-vi.mock("ora", () => {
-  type MockSpinner = {
-    isSpinning: boolean;
-    text: string;
-    stop: () => void;
-    clear: () => void;
-    start: () => MockSpinner;
-    setText: (text: string) => void;
-  };
-
-  const ora = (opts: { text: string; stream: NodeJS.WritableStream }) => {
-    const spinner: MockSpinner = {
-      isSpinning: true,
-      text: opts.text,
-      stop() {
-        spinner.isSpinning = false;
-      },
+vi.mock("../src/tty/spinner.js", () => ({
+  startSpinner: (opts: { text: string; stream: NodeJS.WritableStream; enabled: boolean }) => {
+    if (opts.enabled) opts.stream.write(`- ${opts.text}`);
+    return {
+      stop() {},
       clear() {},
-      start() {
-        opts.stream.write(`- ${spinner.text}`);
-        return spinner;
-      },
-      setText(text: string) {
-        spinner.text = text;
-      },
+      pause() {},
+      refresh() {},
+      resume() {},
+      stopAndClear() {},
+      setText() {},
     };
-    return spinner;
-  };
-  return { default: ora };
-});
+  },
+}));
 
 const mocks = vi.hoisted(() => {
   const fetchLinkContent = vi.fn(async (url: string) => {

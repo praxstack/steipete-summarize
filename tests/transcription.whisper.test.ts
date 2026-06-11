@@ -9,7 +9,7 @@ const falMocks = vi.hoisted(() => ({
   createFalClient: vi.fn(),
 }));
 
-vi.mock("@fal-ai/client", () => ({
+vi.mock("../packages/core/src/transcription/whisper/fal-client.js", () => ({
   createFalClient: falMocks.createFalClient,
 }));
 
@@ -20,7 +20,7 @@ describe("transcription/whisper", () => {
 
   const resetModules = () => {
     vi.resetModules();
-    vi.doMock("@fal-ai/client", () => ({
+    vi.doMock("../packages/core/src/transcription/whisper/fal-client.js", () => ({
       createFalClient: falMocks.createFalClient,
     }));
   };

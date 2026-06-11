@@ -1,4 +1,73 @@
-import ora, { type Options as OraOptions } from "ora";
+export type SpinnerColor = "cyan" | "magenta" | "yellow" | "green" | "gray" | "blue";
+
+const SPINNER_INTERVAL_MS = 80;
+const SPINNER_FRAMES = [
+  "⢀⠀",
+  "⡀⠀",
+  "⠄⠀",
+  "⢂⠀",
+  "⡂⠀",
+  "⠅⠀",
+  "⢃⠀",
+  "⡃⠀",
+  "⠍⠀",
+  "⢋⠀",
+  "⡋⠀",
+  "⠍⠁",
+  "⢋⠁",
+  "⡋⠁",
+  "⠍⠉",
+  "⠋⠉",
+  "⠋⠉",
+  "⠉⠙",
+  "⠉⠙",
+  "⠉⠩",
+  "⠈⢙",
+  "⠈⡙",
+  "⢈⠩",
+  "⡀⢙",
+  "⠄⡙",
+  "⢂⠩",
+  "⡂⢘",
+  "⠅⡘",
+  "⢃⠨",
+  "⡃⢐",
+  "⠍⡐",
+  "⢋⠠",
+  "⡋⢀",
+  "⠍⡁",
+  "⢋⠁",
+  "⡋⠁",
+  "⠍⠉",
+  "⠋⠉",
+  "⠋⠉",
+  "⠉⠙",
+  "⠉⠙",
+  "⠉⠩",
+  "⠈⢙",
+  "⠈⡙",
+  "⠈⠩",
+  "⠀⢙",
+  "⠀⡙",
+  "⠀⠩",
+  "⠀⢘",
+  "⠀⡘",
+  "⠀⠨",
+  "⠀⢐",
+  "⠀⡐",
+  "⠀⠠",
+  "⠀⢀",
+  "⠀⡀",
+] as const;
+
+const COLOR_CODES: Record<SpinnerColor, number> = {
+  cyan: 36,
+  magenta: 35,
+  yellow: 33,
+  green: 32,
+  gray: 90,
+  blue: 34,
+};
 
 function hasVisibleText(input: string): boolean {
   // Strip CSI and OSC escape sequences before checking for visible text.
@@ -17,7 +86,7 @@ export function startSpinner({
   text: string;
   enabled: boolean;
   stream: NodeJS.WritableStream;
-  color?: OraOptions["color"];
+  color?: SpinnerColor;
 }): {
   stop: () => void;
   clear: () => void;
@@ -42,81 +111,83 @@ export function startSpinner({
   let ended = false;
   let paused = false;
   let lastRenderAt = 0;
+  let frameIndex = 0;
+  let currentText = text;
+  let timer: NodeJS.Timeout | null = null;
+  const colorCode = COLOR_CODES[color ?? "cyan"];
 
-  const oraStream = stream as typeof stream & {
-    cursorTo?: (x: number, y?: number) => void;
-    clearLine?: (dir: number) => void;
-    moveCursor?: (dx: number, dy: number) => void;
+  const render = () => {
+    if (ended || paused || !hasVisibleText(currentText)) return;
+    const frame = SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length] ?? "";
+    frameIndex = (frameIndex + 1) % SPINNER_FRAMES.length;
+    stream.write(`\r\u001b[2K\u001b[${colorCode}m${frame}\u001b[0m ${currentText}`);
   };
 
-  if (typeof oraStream.cursorTo !== "function") oraStream.cursorTo = () => {};
-  if (typeof oraStream.clearLine !== "function") oraStream.clearLine = () => {};
-  if (typeof oraStream.moveCursor !== "function") oraStream.moveCursor = () => {};
+  const stopTimer = () => {
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  };
+
+  const startTimer = () => {
+    if (timer || ended || paused) return;
+    render();
+    timer = setInterval(render, SPINNER_INTERVAL_MS);
+    timer.unref?.();
+  };
 
   const clear = () => {
     if (ended) return;
-    // Keep output clean in scrollback.
-    // `ora` clears the line, but we also hard-clear as a fallback.
-    spinner.clear();
     stream.write("\r\u001b[2K");
   };
 
   const pause = () => {
     if (ended || paused) return;
     paused = true;
-    if (spinner.isSpinning) spinner.stop();
-    spinner.clear();
+    stopTimer();
     stream.write("\r\u001b[2K");
   };
 
   const resume = () => {
     if (ended || !paused) return;
     paused = false;
-    spinner.start();
+    startTimer();
   };
 
   const refresh = () => {
     if (ended || paused) return;
-    if (!hasVisibleText(spinner.text)) return;
+    if (!hasVisibleText(currentText)) return;
     const now = Date.now();
     if (now - lastRenderAt < 80) return;
     lastRenderAt = now;
-    spinner.render?.();
+    render();
   };
 
   const stop = () => {
     if (ended) return;
     ended = true;
-    if (spinner.isSpinning) spinner.stop();
+    stopTimer();
   };
 
   const stopAndClear = () => {
     if (ended) return;
     ended = true;
     paused = false;
-    if (spinner.isSpinning) spinner.stop();
-    spinner.clear();
+    stopTimer();
     stream.write("\r\u001b[2K");
   };
 
   const setText = (next: string) => {
     if (ended) return;
     if (!hasVisibleText(next)) return;
-    if (spinner.text === next) return;
-    spinner.text = next;
+    if (currentText === next) return;
+    currentText = next;
     if (!paused) {
       refresh();
     }
   };
 
-  const spinner = ora({
-    text,
-    stream: oraStream,
-    // Match Sweetistics CLI vibe; keep it clean.
-    spinner: "dots12",
-    color: color ?? "cyan",
-    discardStdin: false,
-  }).start();
+  startTimer();
 
   return { stop, clear, pause, refresh, resume, stopAndClear, setText };
 }

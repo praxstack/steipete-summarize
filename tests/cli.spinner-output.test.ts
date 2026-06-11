@@ -114,25 +114,22 @@ function applyCarriageReturnAndClearLine(text: string): string {
   return lines.join("\n");
 }
 
-// Deterministic spinner: write the initial text once; stop/clear are no-ops.
-vi.mock("ora", () => {
-  const ora = (opts: { text: string; stream: NodeJS.WritableStream }) => {
-    const spinner = {
-      isSpinning: true,
-      text: opts.text,
-      stop() {
-        spinner.isSpinning = false;
-      },
-      clear() {},
-      start() {
-        opts.stream.write(`- ${spinner.text}`);
-        return spinner;
-      },
+// Deterministic spinner: write the initial text once and emulate line clearing.
+vi.mock("../src/tty/spinner.js", () => ({
+  startSpinner: (opts: { text: string; stream: NodeJS.WritableStream; enabled: boolean }) => {
+    if (opts.enabled) opts.stream.write(`- ${opts.text}`);
+    const clear = () => opts.stream.write("\r\u001b[2K");
+    return {
+      stop() {},
+      clear,
+      pause: clear,
+      refresh() {},
+      resume() {},
+      stopAndClear: clear,
+      setText() {},
     };
-    return spinner;
-  };
-  return { default: ora };
-});
+  },
+}));
 
 describe("cli spinner output", () => {
   it('clears the "Loading file" spinner line (no scrollback junk) and includes file size', async () => {

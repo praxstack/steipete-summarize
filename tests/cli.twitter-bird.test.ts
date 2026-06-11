@@ -60,32 +60,24 @@ function stripCsi(text: string): string {
   return out;
 }
 
-// Deterministic spinner: write the initial text once; stop/clear are no-ops.
-vi.mock("ora", () => {
-  const ora = (opts: { text: string; stream: NodeJS.WritableStream }) => {
-    let currentText = opts.text;
-    const spinner = {
-      isSpinning: true,
-      get text() {
-        return currentText;
-      },
-      set text(next: string) {
-        currentText = next;
-        opts.stream.write(`\r${currentText}`);
-      },
-      stop() {
-        spinner.isSpinning = false;
-      },
-      clear() {},
-      start() {
-        opts.stream.write(`- ${spinner.text}`);
-        return spinner;
+// Deterministic spinner: write the initial text and status updates without animation.
+vi.mock("../src/tty/spinner.js", () => ({
+  startSpinner: (opts: { text: string; stream: NodeJS.WritableStream; enabled: boolean }) => {
+    if (opts.enabled) opts.stream.write(`- ${opts.text}`);
+    const clear = () => opts.stream.write("\r\u001b[2K");
+    return {
+      stop() {},
+      clear,
+      pause: clear,
+      refresh() {},
+      resume() {},
+      stopAndClear: clear,
+      setText(next: string) {
+        opts.stream.write(`\r${next}`);
       },
     };
-    return spinner;
-  };
-  return { default: ora };
-});
+  },
+}));
 
 describe("cli X status line", () => {
   it("prefers xurl in the status line when both xurl and bird are installed", async () => {

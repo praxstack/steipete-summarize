@@ -67,14 +67,11 @@
     "json5": "^2.2.3",
     "markdansi": "^0.3.1",
     "mime": "^4.1.0",
-    "ora": "^9.4.0",
     "osc-progress": "^0.3.0",
     "tokentally": "^0.1.1",
-    "tslog": "^4.10.2",
     "undici": "8.4.1"
   },
   "devDependencies": {
-    "@fal-ai/client": "^1.10.1",
     "@types/node": "^24.13.1",
     "@types/sanitize-html": "^2.16.1",
     "@typescript/native-preview": "7.0.0-dev.20260609.1",

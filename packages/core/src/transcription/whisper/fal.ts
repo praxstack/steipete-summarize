@@ -1,5 +1,5 @@
-import { createFalClient } from "@fal-ai/client";
 import { TRANSCRIPTION_TIMEOUT_MS } from "./constants.js";
+import { createFalClient } from "./fal-client.js";
 import { toArrayBuffer } from "./utils.js";
 
 export async function transcribeWithFal(

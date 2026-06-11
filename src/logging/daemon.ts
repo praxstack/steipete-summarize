@@ -1,5 +1,4 @@
 import path from "node:path";
-import { Logger } from "tslog";
 import type { SummarizeConfig } from "../config.js";
 import { resolveDaemonLogPaths } from "../daemon/launchd.js";
 import { createRingFileWriter } from "./ring-file.js";
@@ -16,20 +15,25 @@ export type DaemonLoggingConfig = {
   maxFiles: number;
 };
 
+export type DaemonLogWriter = {
+  debug: (payload: Record<string, unknown>) => void;
+  info: (payload: Record<string, unknown>) => void;
+  warn: (payload: Record<string, unknown>) => void;
+  error: (payload: Record<string, unknown>) => void;
+};
+
 export type DaemonLogger = {
   enabled: boolean;
   config: DaemonLoggingConfig | null;
-  logger: Logger<Record<string, unknown>> | null;
-  getSubLogger: (
-    name: string,
-    logObj?: Record<string, unknown>,
-  ) => Logger<Record<string, unknown>> | null;
+  logger: DaemonLogWriter | null;
+  getSubLogger: (name: string, logObj?: Record<string, unknown>) => DaemonLogWriter | null;
 };
 
 const DEFAULT_LOG_LEVEL: DaemonLogLevel = "info";
 const DEFAULT_LOG_FORMAT: DaemonLogFormat = "json";
 const DEFAULT_LOG_MAX_MB = 10;
 const DEFAULT_LOG_MAX_FILES = 3;
+const ROOT_LOGGER_NAME = "summarize-daemon";
 
 const LOG_LEVEL_MAP: Record<DaemonLogLevel, number> = {
   debug: 2,
@@ -60,26 +64,17 @@ function safeJsonStringify(value: unknown): string {
 }
 
 function formatPrettyLine({
-  metaMarkup,
-  args,
-  errors,
+  timestamp,
+  level,
+  name,
+  payload,
 }: {
-  metaMarkup: string;
-  args: unknown[];
-  errors: string[];
+  timestamp: string;
+  level: DaemonLogLevel;
+  name: string;
+  payload: Record<string, unknown>;
 }): string {
-  const parts: string[] = [];
-  const meta = metaMarkup.trim();
-  if (meta) parts.push(meta);
-  if (args.length > 0) {
-    parts.push(
-      args.map((arg) => (typeof arg === "string" ? arg : safeJsonStringify(arg))).join(" "),
-    );
-  }
-  const base = parts.join(" ");
-  if (errors.length === 0) return base;
-  const errorBlock = errors.join("\n");
-  return base ? `${base}\n${errorBlock}` : errorBlock;
+  return `${timestamp} ${level.toUpperCase()} ${name} ${safeJsonStringify(payload)}`;
 }
 
 export function resolveDaemonLoggingConfig({
@@ -140,37 +135,43 @@ export function createDaemonLogger({
   });
 
   const minLevel = LOG_LEVEL_MAP[resolved.level];
-  const baseSettings = {
-    name: "summarize-daemon",
-    minLevel,
-    hideLogPositionForProduction: true,
-    metaProperty: "_meta",
+  const createWriter = (name: string, context: Record<string, unknown> = {}): DaemonLogWriter => {
+    const write = (level: DaemonLogLevel, payload: Record<string, unknown>) => {
+      if (LOG_LEVEL_MAP[level] < minLevel) return;
+      const timestamp = new Date().toISOString();
+      const entry = { ...payload, ...context };
+      if (resolved.format === "pretty") {
+        const displayName = name === ROOT_LOGGER_NAME ? name : `${ROOT_LOGGER_NAME}:${name}`;
+        writer.write(formatPrettyLine({ timestamp, level, name: displayName, payload: entry }));
+        return;
+      }
+      writer.write(
+        safeJsonStringify({
+          ...entry,
+          _meta: {
+            runtime: "node",
+            runtimeVersion: process.version.replace(/^v/, ""),
+            hostname: "unknown",
+            name,
+            ...(name === ROOT_LOGGER_NAME ? {} : { parentNames: [ROOT_LOGGER_NAME] }),
+            date: timestamp,
+            logLevelId: LOG_LEVEL_MAP[level],
+            logLevelName: level.toUpperCase(),
+          },
+        }),
+      );
+    };
+    return {
+      debug: (payload) => write("debug", payload),
+      info: (payload) => write("info", payload),
+      warn: (payload) => write("warn", payload),
+      error: (payload) => write("error", payload),
+    };
   };
 
-  const logger =
-    resolved.format === "pretty"
-      ? new Logger<Record<string, unknown>>({
-          ...baseSettings,
-          type: "pretty",
-          overwrite: {
-            transportFormatted: (metaMarkup, args, errors) => {
-              const line = formatPrettyLine({ metaMarkup, args, errors });
-              writer.write(line);
-            },
-          },
-        })
-      : new Logger<Record<string, unknown>>({
-          ...baseSettings,
-          type: "json",
-          overwrite: {
-            transportJSON: (json) => {
-              writer.write(safeJsonStringify(json));
-            },
-          },
-        });
-
+  const logger = createWriter(ROOT_LOGGER_NAME);
   const getSubLogger = (name: string, logObj?: Record<string, unknown>) =>
-    logger.getSubLogger({ name }, logObj);
+    createWriter(name, logObj);
 
   return {
     enabled: true,

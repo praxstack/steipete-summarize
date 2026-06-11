@@ -26,7 +26,7 @@ vi.mock("node:fs", async () => {
     openAsBlob: fsMock.openAsBlob,
   };
 });
-vi.mock("@fal-ai/client", () => falMock);
+vi.mock("../packages/core/src/transcription/whisper/fal-client.js", () => falMock);
 
 import { fetchTranscriptWithYtDlp } from "../packages/core/src/content/transcript/providers/youtube/yt-dlp.js";
 

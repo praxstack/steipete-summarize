@@ -197,6 +197,12 @@ describe("daemon logging", () => {
       expect(doneExtended?.extracted).toBeTruthy();
       expect(doneMinimal?.summary).toBeUndefined();
       expect(doneMinimal?.extracted).toBeUndefined();
+      expect(doneExtended?._meta).toMatchObject({
+        name: "daemon.summarize",
+        parentNames: ["summarize-daemon"],
+        logLevelId: 3,
+        logLevelName: "INFO",
+      });
     } finally {
       abortController.abort();
       await serverPromise;
