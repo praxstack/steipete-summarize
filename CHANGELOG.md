@@ -27,6 +27,8 @@
 ### Fixes
 
 - Pi CLI: pass summary prompts through private temporary file attachments because current Pi print mode does not read stdin.
+- Speaker identification: preserve fair bounded evidence for long or malformed diarization turns, use model-compatible OpenAI options, and keep usage-less paid calls from reporting a false `$0` estimate.
+- HTML extraction: normalize LinkeDOM HTML attribute names case-insensitively while preserving case-sensitive SVG and MathML attributes.
 - Dependencies: update Markdansi to 0.3.1 and refresh the dependency lockfile.
 - Release: allow exact-version smoke tests to bypass the minimum release age for freshly published packages.
 
