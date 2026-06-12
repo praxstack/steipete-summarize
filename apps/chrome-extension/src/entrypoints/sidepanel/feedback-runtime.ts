@@ -26,8 +26,6 @@ export function createSidepanelFeedbackRuntime({
   slideNoticeEl,
   slideNoticeMessageEl,
   slideNoticeRetryBtn,
-  retryLastAction,
-  retrySlidesStream,
   sendOpenOptions,
   eventTarget = window,
   storage = localStorage,
@@ -49,8 +47,6 @@ export function createSidepanelFeedbackRuntime({
   slideNoticeEl: HTMLElement;
   slideNoticeMessageEl: HTMLElement;
   slideNoticeRetryBtn: HTMLButtonElement;
-  retryLastAction: () => void;
-  retrySlidesStream: () => void;
   sendOpenOptions: () => void;
   eventTarget?: FeedbackEventTarget;
   storage?: Pick<Storage, "setItem">;
@@ -85,8 +81,6 @@ export function createSidepanelFeedbackRuntime({
     inlineRetryBtn: inlineErrorRetryBtn,
     inlineLogsBtn: inlineErrorLogsBtn,
     inlineCloseBtn: inlineErrorCloseBtn,
-    onRetry: retryLastAction,
-    onOpenLogs: () => openOptionsTab("logs"),
     onPanelVisibilityChange: headerController.updateHeaderOffset,
   });
 
@@ -106,9 +100,24 @@ export function createSidepanelFeedbackRuntime({
 
   headerController.updateHeaderOffset();
   eventTarget.addEventListener("resize", headerController.updateHeaderOffset as EventListener);
-  slideNoticeRetryBtn.addEventListener("click", retrySlidesStream);
+  let actionsBound = false;
 
   return {
+    bindActions({
+      retryLastAction,
+      retrySlidesStream,
+    }: {
+      retryLastAction: () => void;
+      retrySlidesStream: () => void;
+    }) {
+      if (actionsBound) return;
+      actionsBound = true;
+      errorController.bindActions({
+        onRetry: retryLastAction,
+        onOpenLogs: () => openOptionsTab("logs"),
+      });
+      slideNoticeRetryBtn.addEventListener("click", retrySlidesStream);
+    },
     errorController,
     headerController,
     hideSlideNotice,

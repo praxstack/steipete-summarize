@@ -73,8 +73,6 @@ function createHarness(options: { storageThrows?: boolean } = {}) {
     slideNoticeEl,
     slideNoticeMessageEl,
     slideNoticeRetryBtn,
-    retryLastAction,
-    retrySlidesStream,
     sendOpenOptions,
     eventTarget: {
       addEventListener: (type, listener) => {
@@ -83,6 +81,7 @@ function createHarness(options: { storageThrows?: boolean } = {}) {
     },
     storage,
   });
+  runtime.bindActions({ retryLastAction, retrySlidesStream });
   const phaseRuntime = createPanelPhaseRuntime({
     panelState: store.state,
     dispatchPanelState: store.dispatch,

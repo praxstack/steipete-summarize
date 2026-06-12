@@ -8,12 +8,11 @@ type ErrorControllerOptions = {
   inlineRetryBtn?: HTMLButtonElement | null;
   inlineLogsBtn?: HTMLButtonElement | null;
   inlineCloseBtn?: HTMLButtonElement | null;
-  onRetry?: () => void;
-  onOpenLogs?: () => void;
   onPanelVisibilityChange?: () => void;
 };
 
 export type ErrorController = {
+  bindActions: (actions: { onRetry: () => void; onOpenLogs: () => void }) => void;
   showPanelError: (message: string) => void;
   showInlineError: (message: string) => void;
   clearPanelError: () => void;
@@ -42,10 +41,9 @@ export const createErrorController = (options: ErrorControllerOptions): ErrorCon
     inlineRetryBtn,
     inlineLogsBtn,
     inlineCloseBtn,
-    onRetry,
-    onOpenLogs,
     onPanelVisibilityChange,
   } = options;
+  let actionsBound = false;
 
   const hideInline = () => {
     inlineMessageEl.textContent = "";
@@ -81,13 +79,17 @@ export const createErrorController = (options: ErrorControllerOptions): ErrorCon
     inlineEl.style.display = "";
   };
 
-  panelRetryBtn?.addEventListener("click", () => onRetry?.());
-  panelLogsBtn?.addEventListener("click", () => onOpenLogs?.());
-  inlineRetryBtn?.addEventListener("click", () => onRetry?.());
-  inlineLogsBtn?.addEventListener("click", () => onOpenLogs?.());
   inlineCloseBtn?.addEventListener("click", () => hideInline());
 
   return {
+    bindActions({ onRetry, onOpenLogs }) {
+      if (actionsBound) return;
+      actionsBound = true;
+      panelRetryBtn?.addEventListener("click", onRetry);
+      panelLogsBtn?.addEventListener("click", onOpenLogs);
+      inlineRetryBtn?.addEventListener("click", onRetry);
+      inlineLogsBtn?.addEventListener("click", onOpenLogs);
+    },
     showPanelError: showPanel,
     showInlineError: showInline,
     clearPanelError: hidePanel,

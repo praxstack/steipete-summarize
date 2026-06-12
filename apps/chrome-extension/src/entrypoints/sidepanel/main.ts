@@ -240,10 +240,6 @@ function handleSlidesTextModeChange(value: SlideTextMode) {
   refreshSummarizeControl();
 }
 
-function retrySlidesStream() {
-  summarizeControlRuntime.retrySlidesStream();
-}
-
 function applySlidesLayout() {
   summarizeControlRuntime.applySlidesLayout();
 }
@@ -276,8 +272,6 @@ const feedbackRuntime = createSidepanelFeedbackRuntime({
   slideNoticeEl,
   slideNoticeMessageEl,
   slideNoticeRetryBtn,
-  retryLastAction,
-  retrySlidesStream,
   sendOpenOptions: () => {
     void send({ type: "panel:openOptions" });
   },
@@ -967,6 +961,11 @@ function retryLastAction() {
   }
   sendSummarize({ refresh: true });
 }
+
+feedbackRuntime.bindActions({
+  retryLastAction,
+  retrySlidesStream: summarizeControlRuntime.retrySlidesStream,
+});
 
 bindSidepanelUiEvents({
   refreshBtn,
