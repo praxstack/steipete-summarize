@@ -256,8 +256,6 @@ const slidesSession = createSlidesSessionStore({
   slidesLayout: defaultSettings.slidesLayout,
 });
 const slidesState = slidesSession.state;
-let activeSlidesRunMeta: { runId: string; url: string | null; local: boolean } | null = null;
-let lastPlannedSlidesRun: RunStart | null = null;
 const slidesTextController = createSlidesTextController({
   getSlides: () => panelState.slides?.slides ?? null,
   getLengthValue: () => appearanceControls.getLengthValue(),
@@ -310,7 +308,7 @@ function hideSlideNotice() {
 }
 
 function stopSlidesStream() {
-  activeSlidesRunMeta = null;
+  panelStateStore.dispatch({ type: "active-slides-run", value: null });
   slidesHydrator.stop();
   setSlidesBusy(false);
   panelStateStore.dispatch({ type: "slides-run", runId: null });
@@ -394,10 +392,9 @@ function getRetainedSlideSummaryMarkdown() {
 }
 
 function attachSummaryRun(run: RunStart) {
+  const activeSlidesRun = panelState.slidesLifecycle.activeRun;
   const preserveActiveLocalSlideRun = Boolean(
-    activeSlidesRunMeta?.local &&
-    activeSlidesRunMeta.url &&
-    panelUrlsMatch(activeSlidesRunMeta.url, run.url),
+    activeSlidesRun?.local && activeSlidesRun.url && panelUrlsMatch(activeSlidesRun.url, run.url),
   );
   if (!preserveActiveLocalSlideRun) {
     stopSlidesStream();
@@ -424,7 +421,7 @@ function attachSummaryRun(run: RunStart) {
   const slidesRunId = runRequestsSlides
     ? run.id
     : preserveActiveLocalSlideRun
-      ? (activeSlidesRunMeta?.runId ?? null)
+      ? (activeSlidesRun?.runId ?? null)
       : null;
   headerController.setBaseTitle(run.title || run.url || "Summarize");
   headerController.setBaseSubtitle("");
@@ -434,6 +431,7 @@ function attachSummaryRun(run: RunStart) {
     tabId: getActiveTabId(),
     runId: run.id,
     slidesRunId,
+    plannedSlidesRun: runRequestsSlides ? run : null,
     source: { url: run.url, title: run.title },
     meta: {
       inputSummary: null,
@@ -441,8 +439,6 @@ function attachSummaryRun(run: RunStart) {
       modelLabel: fallbackModel,
     },
   });
-  slidesState.pendingRunForPlannedSlides = runRequestsSlides ? run : null;
-  lastPlannedSlidesRun = runRequestsSlides ? run : null;
   if (runRequestsSlides) {
     startSlidesStream(run);
     seedPlannedSlidesForRun(run);
@@ -454,13 +450,14 @@ function attachSummaryRun(run: RunStart) {
 }
 
 function applySummarySnapshot(payload: { run: RunStart; markdown: string }) {
+  const activeSlidesRun = panelState.slidesLifecycle.activeRun;
   const preserveActiveSlideRun =
     payload.run.slides === true &&
     (slidesHydrator.getActiveRunId() === payload.run.id ||
       Boolean(
-        activeSlidesRunMeta?.local &&
-        activeSlidesRunMeta.url &&
-        panelUrlsMatch(activeSlidesRunMeta.url, payload.run.url),
+        activeSlidesRun?.local &&
+        activeSlidesRun.url &&
+        panelUrlsMatch(activeSlidesRun.url, payload.run.url),
       ));
   const preservedSlides =
     payload.run.slides &&
@@ -475,8 +472,7 @@ function applySummarySnapshot(payload: { run: RunStart; markdown: string }) {
     stopSlides: !preserveActiveSlideRun,
   });
   const slidesRunId =
-    preservedSlides?.sourceId ??
-    (preserveActiveSlideRun ? (activeSlidesRunMeta?.runId ?? null) : null);
+    preservedSlides?.sourceId ?? (preserveActiveSlideRun ? (activeSlidesRun?.runId ?? null) : null);
   panelStateStore.dispatch({
     type: "restore-session",
     tabId: getActiveTabId(),
@@ -516,17 +512,15 @@ function maybeSeedPlannedSlidesForPendingRun() {
 }
 
 function getPlannedSlidesRunForReseed() {
-  if (slidesState.pendingRunForPlannedSlides) return slidesState.pendingRunForPlannedSlides;
-  if (!lastPlannedSlidesRun) return null;
-  return panelState.runId === lastPlannedSlidesRun.id ||
-    panelState.slidesRunId === lastPlannedSlidesRun.id
-    ? lastPlannedSlidesRun
+  const plannedRun = panelState.slidesLifecycle.plannedRun;
+  if (!plannedRun) return null;
+  return panelState.runId === plannedRun.id || panelState.slidesRunId === plannedRun.id
+    ? plannedRun
     : null;
 }
 
 function clearPlannedSlidesRunForReseed() {
-  slidesState.pendingRunForPlannedSlides = null;
-  lastPlannedSlidesRun = null;
+  panelStateStore.dispatch({ type: "planned-slides-run", value: null });
 }
 
 function plannedSlidesHaveUsableTimingOrImages(run: RunStart) {
@@ -1290,17 +1284,20 @@ const {
 slidesHydrator = activeSlidesHydrator;
 
 function startSlidesStreamForRunId(runId: string, meta?: { url?: string | null; local?: boolean }) {
-  const existing = activeSlidesRunMeta?.runId === runId ? activeSlidesRunMeta : null;
-  activeSlidesRunMeta = {
+  const currentActiveRun = panelState.slidesLifecycle.activeRun;
+  const existing = currentActiveRun?.runId === runId ? currentActiveRun : null;
+  const activeRun = {
     runId,
     url: meta?.url ?? existing?.url ?? panelState.currentSource?.url ?? getActiveTabUrl() ?? null,
     local: meta?.local ?? existing?.local ?? false,
   };
-  startSlidesStreamForRunIdBase(runId, { local: activeSlidesRunMeta.local });
+  panelStateStore.dispatch({ type: "active-slides-run", value: activeRun });
+  startSlidesStreamForRunIdBase(runId, { local: activeRun.local });
 }
 
 function startSlidesSummaryStreamForRunId(runId: string, url?: string | null) {
-  if (activeSlidesRunMeta?.runId === runId && activeSlidesRunMeta.local) return;
+  const activeRun = panelState.slidesLifecycle.activeRun;
+  if (activeRun?.runId === runId && activeRun.local) return;
   startSlidesSummaryStreamForRunIdBase(runId, url ?? null);
 }
 
@@ -1670,7 +1667,8 @@ summarizeControlRuntime = createSummarizeControlRuntime({
   },
   resolveActiveSlidesRunId,
   isActiveSlidesRunLocal: (runId) =>
-    activeSlidesRunMeta?.runId === runId && activeSlidesRunMeta.local,
+    panelState.slidesLifecycle.activeRun?.runId === runId &&
+    panelState.slidesLifecycle.activeRun.local,
   startSlidesStreamForRunId,
   startSlidesSummaryStreamForRunId: (runId, url) => {
     startSlidesSummaryStreamForRunId(runId, url ?? null);

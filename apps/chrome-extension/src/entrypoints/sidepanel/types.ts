@@ -30,6 +30,14 @@ export type PanelState = {
     summaryByUrl: Record<string, PendingSummaryResult>;
     slidesByUrl: Record<string, PendingSlidesRun>;
   };
+  slidesLifecycle: {
+    activeRun: {
+      runId: string;
+      url: string | null;
+      local: boolean;
+    } | null;
+    plannedRun: RunStart | null;
+  };
   runId: string | null;
   slidesRunId: string | null;
   currentSource: { url: string; title: string | null } | null;

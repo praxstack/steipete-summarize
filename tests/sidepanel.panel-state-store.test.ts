@@ -32,6 +32,7 @@ describe("sidepanel panel state store", () => {
       tabId: 42,
       runId: "run-1",
       slidesRunId: "run-1",
+      plannedSlidesRun: null,
       source: { url: "https://example.com", title: "Example" },
       meta: { inputSummary: null, model: "auto", modelLabel: "auto" },
     });
@@ -40,6 +41,7 @@ describe("sidepanel panel state store", () => {
       runId: "run-1",
       activeRun: { tabId: 42 },
       slidesRunId: "run-1",
+      slidesLifecycle: { activeRun: null, plannedRun: null },
       currentSource: { url: "https://example.com", title: "Example" },
       lastMeta: { inputSummary: null, model: "auto", modelLabel: "auto" },
     });
@@ -77,6 +79,32 @@ describe("sidepanel panel state store", () => {
     store.dispatch({ type: "pending-summary-run", urlKey, value: null });
     store.dispatch({ type: "pending-slides-run", urlKey, value: null });
     expect(store.state.pendingRuns).toEqual({ summaryByUrl: {}, slidesByUrl: {} });
+  });
+
+  it("owns active and planned slides lifecycle state", () => {
+    const store = createPanelStateStore();
+    const plannedRun = {
+      id: "run-1",
+      url: "https://example.com/video",
+      title: null,
+      model: "auto",
+      reason: "tab-activated",
+    } as const;
+
+    store.dispatch({
+      type: "active-slides-run",
+      value: { runId: "slides-1", url: plannedRun.url, local: true },
+    });
+    store.dispatch({ type: "planned-slides-run", value: plannedRun });
+
+    expect(store.state.slidesLifecycle).toEqual({
+      activeRun: { runId: "slides-1", url: plannedRun.url, local: true },
+      plannedRun,
+    });
+
+    store.dispatch({ type: "active-slides-run", value: null });
+    store.dispatch({ type: "planned-slides-run", value: null });
+    expect(store.state.slidesLifecycle).toEqual({ activeRun: null, plannedRun: null });
   });
 
   it("restores cached sessions without replacing omitted slides", () => {
@@ -127,6 +155,7 @@ describe("sidepanel panel state store", () => {
       tabId: 42,
       runId: "run-1",
       slidesRunId: "run-1",
+      plannedSlidesRun: null,
       source: { url: "https://example.com", title: null },
       meta: { inputSummary: null, model: null, modelLabel: null },
     });

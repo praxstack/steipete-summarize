@@ -1,5 +1,4 @@
 import type { SlidesLayout } from "../../lib/settings";
-import type { RunStart } from "./types";
 
 type InputMode = "page" | "video";
 
@@ -21,7 +20,6 @@ export type SlidesSessionState = {
   slidesContextUrl: string | null;
   slidesSeededSourceId: string | null;
   slidesAppliedRunId: string | null;
-  pendingRunForPlannedSlides: RunStart | null;
 };
 
 export function createSlidesSessionStore(options: {
@@ -48,7 +46,6 @@ export function createSlidesSessionStore(options: {
     slidesContextUrl: null,
     slidesSeededSourceId: null,
     slidesAppliedRunId: null,
-    pendingRunForPlannedSlides: null,
   };
 
   return {

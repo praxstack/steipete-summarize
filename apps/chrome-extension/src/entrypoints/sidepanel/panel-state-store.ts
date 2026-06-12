@@ -19,6 +19,8 @@ export type PanelStateAction =
       urlKey: string;
       value: PanelState["pendingRuns"]["slidesByUrl"][string] | null;
     }
+  | { type: "active-slides-run"; value: PanelState["slidesLifecycle"]["activeRun"] }
+  | { type: "planned-slides-run"; value: PanelState["slidesLifecycle"]["plannedRun"] }
   | { type: "source"; source: PanelState["currentSource"] }
   | { type: "meta"; meta: PanelState["lastMeta"] }
   | { type: "summary"; markdown: string | null }
@@ -32,6 +34,7 @@ export type PanelStateAction =
       tabId: PanelState["activeRun"]["tabId"];
       runId: string;
       slidesRunId: string | null;
+      plannedSlidesRun: PanelState["slidesLifecycle"]["plannedRun"];
       source: NonNullable<PanelState["currentSource"]>;
       meta: PanelState["lastMeta"];
     }
@@ -60,6 +63,10 @@ export function createInitialPanelState(): PanelState {
     pendingRuns: {
       summaryByUrl: {},
       slidesByUrl: {},
+    },
+    slidesLifecycle: {
+      activeRun: null,
+      plannedRun: null,
     },
     runId: null,
     slidesRunId: null,
@@ -121,6 +128,22 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
           slidesByUrl: updateKeyedValue(state.pendingRuns.slidesByUrl, action.urlKey, action.value),
         },
       };
+    case "active-slides-run":
+      return {
+        ...state,
+        slidesLifecycle: {
+          ...state.slidesLifecycle,
+          activeRun: action.value,
+        },
+      };
+    case "planned-slides-run":
+      return {
+        ...state,
+        slidesLifecycle: {
+          ...state.slidesLifecycle,
+          plannedRun: action.value,
+        },
+      };
     case "source":
       return { ...state, currentSource: action.source };
     case "meta":
@@ -141,6 +164,10 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
       return {
         ...state,
         activeRun: { tabId: action.tabId },
+        slidesLifecycle: {
+          ...state.slidesLifecycle,
+          plannedRun: action.plannedSlidesRun,
+        },
         runId: action.runId,
         slidesRunId: action.slidesRunId,
         currentSource: action.source,

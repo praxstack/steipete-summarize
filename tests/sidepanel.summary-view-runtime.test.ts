@@ -18,6 +18,10 @@ function createPanelState(): PanelState {
       summaryByUrl: {},
       slidesByUrl: {},
     },
+    slidesLifecycle: {
+      activeRun: null,
+      plannedRun: null,
+    },
     runId: null,
     slidesRunId: null,
     currentSource: null,
