@@ -87,24 +87,7 @@ type UiStateRuntimeOpts = {
   isRefreshFreeRunning: () => boolean;
   setModelRefreshDisabled: (value: boolean) => void;
   renderMarkdownHostEl: HTMLElement;
-  setSlidesEnabledValue: (value: boolean) => void;
-  getSlidesEnabledValue: () => boolean;
-  setSlidesParallelValue: (value: boolean) => void;
-  getSlidesParallelValue: () => boolean;
-  setSlidesOcrEnabledValue: (value: boolean) => void;
-  getSlidesOcrEnabledValue: () => boolean;
-  getInputMode: () => "page" | "video";
-  setInputMode: (value: "page" | "video") => void;
-  getInputModeOverride: () => "page" | "video" | null;
-  setInputModeOverride: (value: "page" | "video" | null) => void;
-  getMediaAvailable: () => boolean;
-  setMediaAvailable: (value: boolean) => void;
-  getSlidesLayoutValue: () => string;
-  setSummarizeVideoLabel: (value: string) => void;
-  setSummarizePageWords: (value: number | null) => void;
-  setSummarizeVideoDurationSeconds: (value: number | null) => void;
   isStreaming: () => boolean;
-  getSlidesBusy: () => boolean;
   onSlidesOcrChanged: () => void;
 };
 
@@ -173,11 +156,10 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
 
     const { activeTabId, activeTabUrl } = opts.panelState.navigation;
     const currentSource = opts.panelState.currentSource;
-    const inputModeOverride = opts.getInputModeOverride();
-    const inputMode = opts.getInputMode();
-    const mediaAvailable = opts.getMediaAvailable();
+    const inputModeOverride = opts.panelState.slidesSession.inputModeOverride;
+    const mediaAvailable = opts.panelState.slidesSession.mediaAvailable;
     const chatEnabledValue = opts.panelState.panelSession.chatEnabled;
-    const slidesLayoutValue = opts.getSlidesLayoutValue();
+    const slidesLayoutValue = opts.panelState.slidesSession.slidesLayout;
 
     const ignoreTransientTabState = shouldIgnoreTransientPanelTabState({
       nextTabUrl: state.tab.url ?? null,
@@ -238,10 +220,16 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
         void opts.migrateChatHistory(previousTabId, nextTabId, nextTabUrl);
       }
       if (navigation.nextInputMode) {
-        opts.setInputMode(navigation.nextInputMode);
+        dispatchPanelState(opts, {
+          type: "slides-session-update",
+          value: { inputMode: navigation.nextInputMode },
+        });
       }
       if (navigation.resetInputModeOverride) {
-        opts.setInputModeOverride(null);
+        dispatchPanelState(opts, {
+          type: "slides-session-update",
+          value: { inputModeOverride: null },
+        });
       }
       opts.abortSummaryStream();
       if (!opts.maybeStartPendingSummaryRunForUrl(nextTabUrl)) {
@@ -265,7 +253,10 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
         );
       }
       if (navigation.nextInputMode) {
-        opts.setInputMode(navigation.nextInputMode);
+        dispatchPanelState(opts, {
+          type: "slides-session-update",
+          value: { inputMode: navigation.nextInputMode },
+        });
       }
     }
 
@@ -276,11 +267,18 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
         automationEnabled: state.settings.automationEnabled,
       },
     });
-    opts.setSlidesEnabledValue(state.settings.slidesEnabled);
-    opts.setSlidesParallelValue(state.settings.slidesParallel);
     const nextSlidesOcrEnabled = Boolean(state.settings.slidesOcrEnabled);
-    if (nextSlidesOcrEnabled !== opts.getSlidesOcrEnabledValue()) {
-      opts.setSlidesOcrEnabledValue(nextSlidesOcrEnabled);
+    const slidesOcrChanged =
+      nextSlidesOcrEnabled !== opts.panelState.slidesSession.slidesOcrEnabled;
+    dispatchPanelState(opts, {
+      type: "slides-session-update",
+      value: {
+        slidesEnabled: state.settings.slidesEnabled,
+        slidesParallel: state.settings.slidesParallel,
+        ...(slidesOcrChanged ? { slidesOcrEnabled: nextSlidesOcrEnabled } : {}),
+      },
+    });
+    if (slidesOcrChanged) {
       opts.onSlidesOcrChanged();
     }
     const fallbackModel =
@@ -298,18 +296,24 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
         },
       });
     }
-    if (opts.getSlidesEnabledValue() && nextMediaAvailable) {
-      opts.setInputMode("video");
-      opts.setInputModeOverride("video");
+    if (opts.panelState.slidesSession.slidesEnabled && nextMediaAvailable) {
+      dispatchPanelState(opts, {
+        type: "slides-session-update",
+        value: {
+          inputMode: "video",
+          inputModeOverride: "video",
+        },
+      });
     }
     if (state.settings.slidesLayout && state.settings.slidesLayout !== slidesLayoutValue) {
       opts.setSlidesLayout(state.settings.slidesLayout);
     }
     if (opts.panelState.panelSession.automationEnabled) opts.hideAutomationNotice();
-    if (!opts.getSlidesEnabledValue()) opts.hideSlideNotice();
+    if (!opts.panelState.slidesSession.slidesEnabled) opts.hideSlideNotice();
     if (
-      opts.getSlidesEnabledValue() &&
-      (opts.getInputModeOverride() ?? opts.getInputMode()) === "video"
+      opts.panelState.slidesSession.slidesEnabled &&
+      (opts.panelState.slidesSession.inputModeOverride ??
+        opts.panelState.slidesSession.inputMode) === "video"
     ) {
       opts.maybeApplyPendingSlidesSummary();
       opts.maybeStartPendingSummaryRunForUrl(nextTabUrl ?? null);
@@ -391,13 +395,23 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
       opts.headerController.setStatus(state.status);
     }
     if (!nextMediaAvailable && hasMediaInfo) {
-      opts.setInputMode("page");
-      opts.setInputModeOverride(null);
+      dispatchPanelState(opts, {
+        type: "slides-session-update",
+        value: {
+          inputMode: "page",
+          inputModeOverride: null,
+        },
+      });
     }
-    opts.setMediaAvailable(nextMediaAvailable);
-    opts.setSummarizeVideoLabel(nextVideoLabel);
-    opts.setSummarizePageWords(state.stats.pageWords);
-    opts.setSummarizeVideoDurationSeconds(state.stats.videoDurationSeconds);
+    dispatchPanelState(opts, {
+      type: "slides-session-update",
+      value: {
+        mediaAvailable: nextMediaAvailable,
+        summarizeVideoLabel: nextVideoLabel,
+        summarizePageWords: state.stats.pageWords,
+        summarizeVideoDurationSeconds: state.stats.videoDurationSeconds,
+      },
+    });
     opts.maybeSeedPlannedSlidesForPendingRun();
     opts.refreshSummarizeControl();
     const showingSetup = opts.maybeShowSetup(state);

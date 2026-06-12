@@ -1408,42 +1408,7 @@ const uiStateRuntime = createUiStateRuntime({
     modelRefreshBtn.disabled = value;
   },
   renderMarkdownHostEl,
-  getSlidesEnabledValue: () => getSlidesState().slidesEnabled,
-  setSlidesEnabledValue: (value) => {
-    updateSlidesState({ slidesEnabled: value });
-  },
-  getSlidesParallelValue: () => getSlidesState().slidesParallel,
-  setSlidesParallelValue: (value) => {
-    updateSlidesState({ slidesParallel: value });
-  },
-  getSlidesOcrEnabledValue: () => getSlidesState().slidesOcrEnabled,
-  setSlidesOcrEnabledValue: (value) => {
-    updateSlidesState({ slidesOcrEnabled: value });
-  },
-  getInputMode: () => getSlidesState().inputMode,
-  setInputMode: (value) => {
-    updateSlidesState({ inputMode: value });
-  },
-  getInputModeOverride: () => getSlidesState().inputModeOverride,
-  setInputModeOverride: (value) => {
-    updateSlidesState({ inputModeOverride: value });
-  },
-  getMediaAvailable: () => getSlidesState().mediaAvailable,
-  setMediaAvailable: (value) => {
-    updateSlidesState({ mediaAvailable: value });
-  },
-  getSlidesLayoutValue: () => getSlidesState().slidesLayout,
-  setSummarizeVideoLabel: (value) => {
-    updateSlidesState({ summarizeVideoLabel: value });
-  },
-  setSummarizePageWords: (value) => {
-    updateSlidesState({ summarizePageWords: value });
-  },
-  setSummarizeVideoDurationSeconds: (value) => {
-    updateSlidesState({ summarizeVideoDurationSeconds: value });
-  },
   isStreaming,
-  getSlidesBusy: () => getSlidesState().slidesBusy,
   onSlidesOcrChanged: updateSlidesTextState,
 });
 
