@@ -12,9 +12,8 @@ import {
 import { createSlidesRenderer } from "./slides-renderer";
 import { resolveSlidesInputMode } from "./slides-session-state";
 import { formatSlideTimestamp } from "./slides-state";
-import type { SlideSummarySource } from "./slides-text-controller";
 import { renderSummaryMarkdownDisplay } from "./summary-renderer";
-import type { PanelState } from "./types";
+import type { PanelState, SlideSummarySource } from "./types";
 
 export function createSlidesViewRuntime({
   renderMarkdownHostEl,

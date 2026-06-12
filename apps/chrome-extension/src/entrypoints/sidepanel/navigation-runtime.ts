@@ -1,4 +1,5 @@
 import { panelUrlsMatch } from "./session-policy";
+import type { NavigationPolicyState } from "./types";
 
 export type NavigationRuntime = {
   markAgentNavigationIntent: (url: string | null | undefined) => void;
@@ -10,20 +11,19 @@ export type NavigationRuntime = {
 };
 
 type NavigationRuntimeOptions = {
+  getState: () => NavigationPolicyState;
+  updateState: (value: Partial<NavigationPolicyState>) => void;
   ttlMs?: number;
 };
 
-type AgentNavigation = { url: string; tabId: number | null; at: number };
-
-export function createNavigationRuntime(options: NavigationRuntimeOptions = {}): NavigationRuntime {
+export function createNavigationRuntime(options: NavigationRuntimeOptions): NavigationRuntime {
   const { ttlMs = 20_000 } = options;
-  let lastAgentNavigation: AgentNavigation | null = null;
-  let pendingPreserveChatForUrl: { url: string; at: number } | null = null;
 
   const isRecentAgentNavigation = (tabId: number | null, url: string | null) => {
+    const { lastAgentNavigation } = options.getState();
     if (!lastAgentNavigation) return false;
     if (Date.now() - lastAgentNavigation.at > ttlMs) {
-      lastAgentNavigation = null;
+      options.updateState({ lastAgentNavigation: null });
       return false;
     }
     if (tabId != null && lastAgentNavigation.tabId != null && tabId === lastAgentNavigation.tabId) {
@@ -37,13 +37,13 @@ export function createNavigationRuntime(options: NavigationRuntimeOptions = {}):
 
   const notePreserveChatForUrl = (url: string | null) => {
     if (!url) return;
-    pendingPreserveChatForUrl = { url, at: Date.now() };
+    options.updateState({ pendingPreserveChatForUrl: { url, at: Date.now() } });
   };
 
   const shouldPreserveChatForRun = (url: string) => {
-    const pending = pendingPreserveChatForUrl;
+    const pending = options.getState().pendingPreserveChatForUrl;
     if (pending && Date.now() - pending.at < ttlMs && panelUrlsMatch(url, pending.url)) {
-      pendingPreserveChatForUrl = null;
+      options.updateState({ pendingPreserveChatForUrl: null });
       return true;
     }
     return isRecentAgentNavigation(null, url);
@@ -53,7 +53,9 @@ export function createNavigationRuntime(options: NavigationRuntimeOptions = {}):
     markAgentNavigationIntent(url) {
       const trimmed = typeof url === "string" ? url.trim() : "";
       if (!trimmed) return;
-      lastAgentNavigation = { url: trimmed, tabId: null, at: Date.now() };
+      options.updateState({
+        lastAgentNavigation: { url: trimmed, tabId: null, at: Date.now() },
+      });
     },
     markAgentNavigationResult(details) {
       if (!details || typeof details !== "object") return;
@@ -61,14 +63,16 @@ export function createNavigationRuntime(options: NavigationRuntimeOptions = {}):
       const finalUrl = typeof obj.finalUrl === "string" ? obj.finalUrl.trim() : "";
       const tabId = typeof obj.tabId === "number" ? obj.tabId : null;
       if (!finalUrl && tabId == null) return;
-      lastAgentNavigation = {
-        url: finalUrl || lastAgentNavigation?.url || "",
-        tabId,
-        at: Date.now(),
-      };
+      options.updateState({
+        lastAgentNavigation: {
+          url: finalUrl || options.getState().lastAgentNavigation?.url || "",
+          tabId,
+          at: Date.now(),
+        },
+      });
     },
     getLastAgentNavigationUrl() {
-      return lastAgentNavigation?.url ?? null;
+      return options.getState().lastAgentNavigation?.url ?? null;
     },
     isRecentAgentNavigation,
     notePreserveChatForUrl,

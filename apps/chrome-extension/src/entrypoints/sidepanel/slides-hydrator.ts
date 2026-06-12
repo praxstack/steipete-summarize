@@ -9,7 +9,6 @@ export type SlidesHydrator = {
   start: (runId: string, opts?: { silent?: boolean; local?: boolean }) => Promise<void>;
   stop: () => void;
   isStreaming: () => boolean;
-  getActiveRunId: () => string | null;
   handlePayload: (payload: SseSlidesData) => void;
   handleSummaryFromCache: (value: boolean | null | undefined) => void;
   syncFromCache: (args: {
@@ -47,22 +46,22 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
     snapshotFetchImpl,
   } = options;
 
-  let activeRunId: string | null = null;
+  let hydrationRunId: string | null = null;
   let hasSlidesPayload = false;
   let snapshotRequestId = 0;
   let snapshotInFlight = false;
   let activeStartRequestId = 0;
   let suppressStreamErrors = false;
 
-  const setActiveRunId = (runId: string | null) => {
-    activeRunId = runId;
+  const setHydrationRunId = (runId: string | null) => {
+    hydrationRunId = runId;
     hasSlidesPayload = false;
     snapshotInFlight = false;
     snapshotRequestId += 1;
   };
 
   const handlePayload = (payload: SseSlidesData) => {
-    if (!activeRunId) return;
+    if (!hydrationRunId) return;
     const normalized = normalizeSlidesPayload(payload);
     if (!normalized) return;
     hasSlidesPayload = true;
@@ -70,14 +69,14 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
   };
 
   const hydrateSnapshot = async (_reason?: string) => {
-    if (!activeRunId) return;
+    if (!hydrationRunId) return;
     if (snapshotInFlight) return;
-    const runId = activeRunId;
+    const runId = hydrationRunId;
     const requestId = ++snapshotRequestId;
     snapshotInFlight = true;
     try {
       const localSlides = (await resolveLocalSlides?.(runId)) ?? null;
-      if (localSlides && activeRunId === runId && snapshotRequestId === requestId) {
+      if (localSlides && hydrationRunId === runId && snapshotRequestId === requestId) {
         handlePayload(localSlides);
         return;
       }
@@ -90,7 +89,7 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
       if (!res.ok) return;
       const json = (await res.json()) as SnapshotResponse;
       if (!json?.ok || !json.slides) return;
-      if (activeRunId !== runId || snapshotRequestId !== requestId) return;
+      if (hydrationRunId !== runId || snapshotRequestId !== requestId) return;
       handlePayload(json.slides);
     } catch (error) {
       onSnapshotError?.(error);
@@ -121,7 +120,7 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
   const start = async (runId: string, opts?: { silent?: boolean; local?: boolean }) => {
     const requestId = activeStartRequestId + 1;
     activeStartRequestId = requestId;
-    setActiveRunId(runId);
+    setHydrationRunId(runId);
     suppressStreamErrors = Boolean(opts?.silent);
     try {
       const localSlides = (await resolveLocalSlides?.(runId)) ?? null;
@@ -146,7 +145,7 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
   const stop = () => {
     activeStartRequestId += 1;
     suppressStreamErrors = false;
-    setActiveRunId(null);
+    setHydrationRunId(null);
     stream.abort();
   };
 
@@ -167,8 +166,8 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
     hasSlides: boolean;
   }) => {
     if (!runId) return;
-    if (activeRunId !== runId) {
-      setActiveRunId(runId);
+    if (hydrationRunId !== runId) {
+      setHydrationRunId(runId);
     }
     if (hasSlides) {
       hasSlidesPayload = true;
@@ -186,7 +185,6 @@ export function createSlidesHydrator(options: SlidesHydratorOptions): SlidesHydr
     start,
     stop,
     isStreaming: () => stream.isStreaming(),
-    getActiveRunId: () => activeRunId,
     handlePayload,
     handleSummaryFromCache,
     syncFromCache,

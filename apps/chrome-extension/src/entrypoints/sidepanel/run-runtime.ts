@@ -146,7 +146,6 @@ export function createSidepanelRunRuntime({
       start: streamController.start,
     },
     slides: {
-      getHydratedRunId: slidesHydrator.getActiveRunId,
       queueRender: queueSlidesRender,
       seedPlannedRun: plannedSlidesRuntime.seedForRun,
       setTranscriptTimedText: setSlidesTranscriptTimedText,

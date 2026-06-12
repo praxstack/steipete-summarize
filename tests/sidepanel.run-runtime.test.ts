@@ -97,7 +97,6 @@ describe("sidepanel run runtime", () => {
           runtime: {
             maybeApplyPendingSlidesSummary: vi.fn(),
             slidesHydrator: {
-              getActiveRunId: vi.fn(() => null),
               handlePayload: vi.fn(),
               handleSummaryFromCache: vi.fn(),
             },

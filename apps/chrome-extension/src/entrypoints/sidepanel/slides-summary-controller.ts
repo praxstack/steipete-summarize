@@ -1,9 +1,8 @@
 import { buildSlidePresentation } from "../../lib/slides-presentation";
 import { applyPanelStateAction, type PanelStateAction } from "./panel-state-store";
 import { resolveSlidesLengthArg } from "./slides-state";
-import type { SlideSummarySource } from "./slides-text-controller";
 import { createStreamController } from "./stream-controller";
-import type { PanelState, RunStart, UiState } from "./types";
+import type { PanelState, RunStart, SlideSummarySource, UiState } from "./types";
 
 type SlidesSummarySnapshot = {
   runId: string | null;

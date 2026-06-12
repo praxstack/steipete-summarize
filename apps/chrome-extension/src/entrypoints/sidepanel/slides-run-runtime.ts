@@ -108,7 +108,7 @@ export function createSlidesRunRuntime(options: {
   };
 
   const startSlidesStream = (run: RunStart) => {
-    startSlidesStreamCore(run.id);
+    startSlidesStreamForRunId(run.id, { url: run.url });
   };
 
   const startSlidesSummaryStreamForRunId = (runId: string, targetUrl?: string | null) => {

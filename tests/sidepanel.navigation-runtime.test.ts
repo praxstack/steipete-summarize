@@ -4,6 +4,18 @@ import {
   type PanelSource,
 } from "../apps/chrome-extension/src/entrypoints/sidepanel/active-tab-sync.js";
 import { createNavigationRuntime } from "../apps/chrome-extension/src/entrypoints/sidepanel/navigation-runtime.js";
+import { createPanelStateStore } from "../apps/chrome-extension/src/entrypoints/sidepanel/panel-state-store.js";
+
+function createRuntime(options: { ttlMs?: number } = {}) {
+  const store = createPanelStateStore();
+  return createNavigationRuntime({
+    getState: () => store.state.navigation,
+    updateState: (value) => {
+      store.dispatch({ type: "navigation-policy-update", value });
+    },
+    ...options,
+  });
+}
 
 function createSyncHarness({
   currentSource = { url: "https://example.com/a", title: "A" },
@@ -12,7 +24,7 @@ function createSyncHarness({
   currentSource?: PanelSource | null;
   tab?: { id?: number; url?: string; title?: string } | null;
 } = {}) {
-  const navigationRuntime = createNavigationRuntime();
+  const navigationRuntime = createRuntime();
   let source = currentSource;
   const resetForNavigation = vi.fn();
   const setBaseTitle = vi.fn();
@@ -72,7 +84,7 @@ describe("sidepanel navigation runtime", () => {
   });
 
   it("ignores blank navigation intents and malformed results", () => {
-    const runtime = createNavigationRuntime();
+    const runtime = createRuntime();
 
     runtime.markAgentNavigationIntent("   ");
     runtime.markAgentNavigationResult(null);
@@ -83,7 +95,7 @@ describe("sidepanel navigation runtime", () => {
 
   it("preserves chat for matching pending URLs only within ttl", () => {
     vi.useFakeTimers();
-    const runtime = createNavigationRuntime({ ttlMs: 100 });
+    const runtime = createRuntime({ ttlMs: 100 });
 
     runtime.notePreserveChatForUrl("https://example.com/next");
     expect(runtime.shouldPreserveChatForRun("https://example.com/next")).toBe(true);
@@ -96,7 +108,7 @@ describe("sidepanel navigation runtime", () => {
 
   it("treats matching tab ids as recent agent navigation", () => {
     vi.useFakeTimers();
-    const runtime = createNavigationRuntime({ ttlMs: 100 });
+    const runtime = createRuntime({ ttlMs: 100 });
 
     runtime.markAgentNavigationResult({ finalUrl: "https://example.com/final", tabId: 7 });
     expect(runtime.isRecentAgentNavigation(7, null)).toBe(true);
@@ -135,7 +147,7 @@ describe("sidepanel navigation runtime", () => {
   });
 
   it("swallows tab-query failures", async () => {
-    const navigationRuntime = createNavigationRuntime();
+    const navigationRuntime = createRuntime();
     const resetForNavigation = vi.fn();
 
     await expect(

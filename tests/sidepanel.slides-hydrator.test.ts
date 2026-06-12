@@ -27,15 +27,18 @@ async function waitFor(check: () => boolean, attempts = 20) {
 }
 
 describe("sidepanel slides hydrator", () => {
-  it("reports and clears the active run id", async () => {
+  it("ignores payloads after the active hydration stops", async () => {
     let releaseStream: (() => void) | null = null;
+    let streamRequested = false;
     const streamReleased = new Promise<void>((resolve) => {
       releaseStream = resolve;
     });
+    const received: SseSlidesData[] = [];
     const hydrator = createSlidesHydrator({
-      getToken: async () => "",
-      onSlides: () => {},
+      getToken: async () => "token",
+      onSlides: (slides) => received.push(slides),
       streamFetchImpl: async () => {
+        streamRequested = true;
         await streamReleased;
         return new Response(streamFromEvents([{ event: "done", data: {} }]), { status: 200 });
       },
@@ -43,11 +46,17 @@ describe("sidepanel slides hydrator", () => {
     });
 
     const startPromise = hydrator.start("run-active");
-    await waitFor(() => hydrator.getActiveRunId() === "run-active");
+    await waitFor(() => streamRequested);
 
-    expect(hydrator.getActiveRunId()).toBe("run-active");
     hydrator.stop();
-    expect(hydrator.getActiveRunId()).toBeNull();
+    hydrator.handlePayload({
+      sourceUrl: "https://example.com",
+      sourceId: "stopped",
+      sourceKind: "youtube",
+      ocrAvailable: false,
+      slides: [{ index: 1, timestamp: 0, imageUrl: "https://example.com/1.png" }],
+    });
+    expect(received).toEqual([]);
     releaseStream?.();
     await startPromise;
   });
@@ -158,6 +167,7 @@ describe("sidepanel slides hydrator", () => {
 
   it("does not start a stale stream after a superseded local lookup misses", async () => {
     let resolveLocal: ((value: SseSlidesData | null) => void) | null = null;
+    let localLookupStarted = false;
     const localPromise = new Promise<SseSlidesData | null>((resolve) => {
       resolveLocal = resolve;
     });
@@ -167,12 +177,16 @@ describe("sidepanel slides hydrator", () => {
     const hydrator = createSlidesHydrator({
       getToken: async () => "",
       onSlides: () => {},
-      resolveLocalSlides: async (runId) => (runId === "run-1" ? await localPromise : null),
+      resolveLocalSlides: async (runId) => {
+        if (runId !== "run-1") return null;
+        localLookupStarted = true;
+        return await localPromise;
+      },
       streamFetchImpl,
     });
 
     const staleStart = hydrator.start("run-1");
-    await waitFor(() => hydrator.getActiveRunId() === "run-1");
+    await waitFor(() => localLookupStarted);
     hydrator.stop();
     resolveLocal?.(null);
     await staleStart;

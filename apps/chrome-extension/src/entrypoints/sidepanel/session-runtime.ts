@@ -43,7 +43,12 @@ export function createSidepanelSessionRuntime({
     summary: { viewRuntime: summaryViewRuntime },
     slides: { renderInlineSlides, runtime: slidesRuntime },
   } = presentationRuntime;
-  const navigationRuntime = createNavigationRuntime();
+  const navigationRuntime = createNavigationRuntime({
+    getState: () => panelState.navigation,
+    updateState: (value) => {
+      dispatchPanelState({ type: "navigation-policy-update", value });
+    },
+  });
 
   const getActiveTabId = () => panelState.navigation.activeTabId;
   const getActiveTabUrl = () => panelState.navigation.activeTabUrl;

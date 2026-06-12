@@ -217,11 +217,13 @@ describe("sidepanel chat runtime", () => {
     expect(harness.runtime.enqueueMessage("  queued \n message  ")).toBe(true);
     harness.runtime.maybeSendQueuedMessage();
     expect(harness.runtime.getQueueLength()).toBe(1);
+    expect(harness.store.state.chat.queue).toMatchObject([{ text: "queued message" }]);
 
     harness.store.dispatch({ type: "chat-streaming", value: false });
     harness.runtime.maybeSendQueuedMessage();
 
     await vi.waitFor(() => expect(harness.runtime.getQueueLength()).toBe(0));
+    expect(harness.store.state.chat.queue).toEqual([]);
     await vi.waitFor(() => expect(harness.store.state.chat.streaming).toBe(false));
     expect(harness.store.state.chat.messages).toMatchObject([
       { role: "user", content: "queued message" },

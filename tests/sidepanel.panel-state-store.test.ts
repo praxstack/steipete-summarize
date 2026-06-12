@@ -16,13 +16,53 @@ describe("sidepanel panel state store", () => {
     expect(store.state.navigation).toEqual({
       activeTabId: 42,
       activeTabUrl: "https://example.com",
+      lastAgentNavigation: null,
+      pendingPreserveChatForUrl: null,
     });
 
     store.dispatch({ type: "active-tab-url", url: "https://example.com/next" });
     expect(store.state.navigation).toEqual({
       activeTabId: 42,
       activeTabUrl: "https://example.com/next",
+      lastAgentNavigation: null,
+      pendingPreserveChatForUrl: null,
     });
+  });
+
+  it("owns navigation policy markers without losing active tab identity", () => {
+    const store = createPanelStateStore();
+    store.dispatch({ type: "active-tab", tabId: 42, url: "https://example.com" });
+    store.dispatch({
+      type: "navigation-policy-update",
+      value: {
+        lastAgentNavigation: {
+          url: "https://example.com/next",
+          tabId: 43,
+          at: 100,
+        },
+        pendingPreserveChatForUrl: {
+          url: "https://example.com/next",
+          at: 101,
+        },
+      },
+    });
+
+    expect(store.state.navigation).toEqual({
+      activeTabId: 42,
+      activeTabUrl: "https://example.com",
+      lastAgentNavigation: {
+        url: "https://example.com/next",
+        tabId: 43,
+        at: 100,
+      },
+      pendingPreserveChatForUrl: {
+        url: "https://example.com/next",
+        at: 101,
+      },
+    });
+
+    store.dispatch({ type: "active-tab", tabId: 44, url: "https://example.com/final" });
+    expect(store.state.navigation.lastAgentNavigation?.tabId).toBe(43);
   });
 
   it("attaches runs as one transition", () => {
@@ -158,6 +198,46 @@ describe("sidepanel panel state store", () => {
     });
   });
 
+  it("owns serializable slides text state", () => {
+    const store = createPanelStateStore();
+
+    store.dispatch({
+      type: "slides-text-update",
+      value: {
+        mode: "ocr",
+        toggleVisible: true,
+        transcriptTimedText: "[00:00] Intro",
+        transcriptAvailable: true,
+        ocrAvailable: true,
+        descriptionsByIndex: { 1: "Description" },
+        summariesByIndex: { 1: "Summary" },
+        titlesByIndex: { 1: "Title" },
+        summarySource: "slides",
+      },
+    });
+
+    expect(store.state.slidesText).toMatchObject({
+      mode: "ocr",
+      toggleVisible: true,
+      descriptionsByIndex: { 1: "Description" },
+      titlesByIndex: { 1: "Title" },
+      summarySource: "slides",
+    });
+
+    store.dispatch({ type: "slides-text-reset" });
+    expect(store.state.slidesText).toEqual({
+      mode: "transcript",
+      toggleVisible: false,
+      transcriptTimedText: null,
+      transcriptAvailable: false,
+      ocrAvailable: false,
+      descriptionsByIndex: {},
+      summariesByIndex: {},
+      titlesByIndex: {},
+      summarySource: null,
+    });
+  });
+
   it("owns local panel session state", () => {
     const store = createPanelStateStore();
 
@@ -205,13 +285,30 @@ describe("sidepanel panel state store", () => {
     expect(store.state.chat).toEqual({
       messages: [{ ...assistantMessage, content: "Updated" }],
       streaming: true,
+      queue: [],
     });
 
     store.dispatch({ type: "chat-messages", messages: [userMessage] });
     expect(store.state.chat.messages).toEqual([userMessage]);
 
     store.dispatch({ type: "chat-reset" });
-    expect(store.state.chat).toEqual({ messages: [], streaming: false });
+    expect(store.state.chat).toEqual({ messages: [], streaming: false, queue: [] });
+  });
+
+  it("owns queued chat messages", () => {
+    const store = createPanelStateStore();
+    const first = { id: "queue-1", text: "First", createdAt: 1 };
+    const second = { id: "queue-2", text: "Second", createdAt: 2 };
+
+    store.dispatch({ type: "chat-queue-add", item: first });
+    store.dispatch({ type: "chat-queue-add", item: second });
+    expect(store.state.chat.queue).toEqual([first, second]);
+
+    store.dispatch({ type: "chat-queue-remove", id: first.id });
+    expect(store.state.chat.queue).toEqual([second]);
+
+    store.dispatch({ type: "chat-queue-clear" });
+    expect(store.state.chat.queue).toEqual([]);
   });
 
   it("restores cached sessions without replacing omitted slides", () => {

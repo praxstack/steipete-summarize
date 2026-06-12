@@ -9,7 +9,6 @@ type SummaryStreamPort = {
 };
 
 type SlidesRunPort = {
-  getHydratedRunId: () => string | null;
   queueRender: () => void;
   seedPlannedRun: (run: RunStart) => boolean;
   setTranscriptTimedText: (value: string | null) => void;
@@ -120,7 +119,7 @@ export function createSummaryRunRuntime({
     const activeSlidesRun = panelState.slidesLifecycle.activeRun;
     const preserveActiveSlideRun =
       payload.run.slides === true &&
-      (slides.getHydratedRunId() === payload.run.id ||
+      (activeSlidesRun?.runId === payload.run.id ||
         Boolean(
           activeSlidesRun?.local &&
           activeSlidesRun.url &&

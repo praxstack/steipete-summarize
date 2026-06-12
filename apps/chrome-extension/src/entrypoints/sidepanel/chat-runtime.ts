@@ -124,6 +124,8 @@ export function createSidepanelChatRuntime({
   });
 
   const chatQueueRuntime = createChatQueueRuntime({
+    panelState,
+    dispatchPanelState,
     chatQueueEl,
     maxQueue: MAX_CHAT_QUEUE,
     setStatus,

@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
+import { createPanelStateStore } from "../apps/chrome-extension/src/entrypoints/sidepanel/panel-state-store.js";
 import { createSlidesTextController } from "../apps/chrome-extension/src/entrypoints/sidepanel/slides-text-controller.js";
+
+type ControllerOptions = Omit<
+  Parameters<typeof createSlidesTextController>[0],
+  "panelState" | "dispatchPanelState"
+>;
+
+function createController(options: ControllerOptions) {
+  const store = createPanelStateStore();
+  return createSlidesTextController({
+    ...options,
+    panelState: store.state,
+    dispatchPanelState: store.dispatch,
+  });
+}
 
 describe("sidepanel slides text controller", () => {
   it("builds transcript-first descriptions from timed text", () => {
@@ -7,7 +22,7 @@ describe("sidepanel slides text controller", () => {
       { index: 1, timestamp: 0, imageUrl: "x", ocrText: "Ignored OCR text" },
       { index: 2, timestamp: 30, imageUrl: "y", ocrText: "Fallback OCR text for second slide" },
     ];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -24,7 +39,7 @@ describe("sidepanel slides text controller", () => {
   });
 
   it("keeps slides-derived titles authoritative over summary titles", () => {
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => [{ index: 1, timestamp: 2, imageUrl: "x", ocrText: null }],
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -48,7 +63,7 @@ describe("sidepanel slides text controller", () => {
   });
 
   it("keeps completed slide summaries authoritative over longer main summaries", () => {
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => [{ index: 1, timestamp: 2, imageUrl: "x", ocrText: null }],
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -81,7 +96,7 @@ describe("sidepanel slides text controller", () => {
       { index: 1, timestamp: 0, imageUrl: "x", ocrText: null },
       { index: 2, timestamp: 30, imageUrl: "y", ocrText: null },
     ];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -129,7 +144,7 @@ describe("sidepanel slides text controller", () => {
       { index: 1, timestamp: 0, imageUrl: "x", ocrText: null },
       { index: 2, timestamp: 30, imageUrl: "y", ocrText: null },
     ];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -167,7 +182,7 @@ describe("sidepanel slides text controller", () => {
       { index: 1, timestamp: 0, imageUrl: "x", ocrText: null },
       { index: 2, timestamp: 30, imageUrl: "y", ocrText: null },
     ];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -194,7 +209,7 @@ describe("sidepanel slides text controller", () => {
       { index: 1, timestamp: 0, imageUrl: "x", ocrText: null },
       { index: 2, timestamp: 30, imageUrl: "y", ocrText: null },
     ];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -241,7 +256,7 @@ describe("sidepanel slides text controller", () => {
       { index: 1, timestamp: 0, imageUrl: "x", ocrText: "Ignored OCR text" },
       { index: 2, timestamp: 30, imageUrl: "y", ocrText: "Fallback OCR text for second slide" },
     ];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -283,7 +298,7 @@ describe("sidepanel slides text controller", () => {
       imageUrl: string;
       ocrText: string | null;
     }> = [];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -341,7 +356,7 @@ describe("sidepanel slides text controller", () => {
           "Readable OCR body for slide three with enough detail to keep the OCR toggle meaningful.",
       },
     ];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -363,7 +378,7 @@ describe("sidepanel slides text controller", () => {
   });
 
   it("preserves existing titles when asked to ignore empty updates", () => {
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => [{ index: 1, timestamp: 2, imageUrl: "x", ocrText: null }],
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -405,7 +420,7 @@ describe("sidepanel slides text controller", () => {
         ocrText: "Third readable OCR paragraph for slide three with enough detail to count.",
       },
     ];
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => slides,
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => true,
@@ -433,7 +448,7 @@ describe("sidepanel slides text controller", () => {
   });
 
   it("resets transcript and ocr state cleanly", () => {
-    const controller = createSlidesTextController({
+    const controller = createController({
       getSlides: () => [{ index: 1, timestamp: 2, imageUrl: "x", ocrText: "tiny" }],
       getLengthValue: () => "short",
       getSlidesOcrEnabled: () => false,

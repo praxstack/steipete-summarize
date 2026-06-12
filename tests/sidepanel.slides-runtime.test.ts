@@ -20,7 +20,6 @@ let hydrator: {
   start: ReturnType<typeof vi.fn>;
   handlePayload: ReturnType<typeof vi.fn>;
   handleSummaryFromCache: ReturnType<typeof vi.fn>;
-  getActiveRunId: ReturnType<typeof vi.fn>;
   isStreaming: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
   syncFromCache: ReturnType<typeof vi.fn>;
@@ -51,7 +50,6 @@ vi.mock("../apps/chrome-extension/src/entrypoints/sidepanel/slides-hydrator", ()
       start: vi.fn(async () => {}),
       handlePayload: vi.fn(),
       handleSummaryFromCache: vi.fn(),
-      getActiveRunId: vi.fn(() => null),
       isStreaming: vi.fn(() => false),
       stop: vi.fn(),
       syncFromCache: vi.fn(),

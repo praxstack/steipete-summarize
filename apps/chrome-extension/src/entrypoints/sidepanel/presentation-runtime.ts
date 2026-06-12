@@ -78,6 +78,8 @@ export function createSidepanelPresentationRuntime({
 }) {
   const markdown = createMarkdownRenderer();
   const slidesTextController = createSlidesTextController({
+    panelState,
+    dispatchPanelState,
     getSlides: () => panelState.slides?.slides ?? null,
     getLengthValue: appearanceControls.getLengthValue,
     getSlidesOcrEnabled: () => panelState.slidesSession.slidesOcrEnabled,
@@ -140,8 +142,7 @@ export function createSidepanelPresentationRuntime({
   const refreshSummarizeControl = summarizeControlView.refresh;
 
   const panelCacheController = createPanelCacheController({
-    getSnapshot: () =>
-      buildPanelCachePayload(panelState, slidesTextController.getTranscriptTimedText()),
+    getSnapshot: () => buildPanelCachePayload(panelState),
     sendCache: (payload) => {
       void send({ type: "panel:cache", cache: payload });
     },

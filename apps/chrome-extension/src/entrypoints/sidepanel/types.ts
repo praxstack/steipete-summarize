@@ -3,11 +3,32 @@ import type { RunStart, UiState } from "../../lib/panel-contracts";
 import type { SseSlidesData } from "../../lib/runtime-contracts";
 import type { Settings } from "../../lib/settings";
 import type { SlidesSessionState } from "./slides-session-state";
+import type { SlideTextMode } from "./slides-state";
 export type { RunStart, UiState } from "../../lib/panel-contracts";
 
 export type PanelPhase = "idle" | "setup" | "connecting" | "streaming" | "error";
 
 export type ChatMessage = Message & { id: string };
+
+export type ChatQueueItem = {
+  id: string;
+  text: string;
+  createdAt: number;
+};
+
+export type SlideSummarySource = "summary" | "slides" | "slides-partial" | null;
+
+export type NavigationPolicyState = {
+  lastAgentNavigation: {
+    url: string;
+    tabId: number | null;
+    at: number;
+  } | null;
+  pendingPreserveChatForUrl: {
+    url: string;
+    at: number;
+  } | null;
+};
 
 export type PendingSummaryResult =
   | { type: "run"; run: RunStart }
@@ -21,7 +42,7 @@ export type PendingSlidesRun = {
 
 export type PanelState = {
   ui: UiState | null;
-  navigation: {
+  navigation: NavigationPolicyState & {
     activeTabId: number | null;
     activeTabUrl: string | null;
   };
@@ -49,6 +70,17 @@ export type PanelState = {
     complete: boolean;
     model: string | null;
   };
+  slidesText: {
+    mode: SlideTextMode;
+    toggleVisible: boolean;
+    transcriptTimedText: string | null;
+    transcriptAvailable: boolean;
+    ocrAvailable: boolean;
+    descriptionsByIndex: Record<number, string>;
+    summariesByIndex: Record<number, string>;
+    titlesByIndex: Record<number, string>;
+    summarySource: SlideSummarySource;
+  };
   slidesSession: SlidesSessionState;
   panelSession: {
     autoSummarize: boolean;
@@ -73,6 +105,7 @@ export type PanelState = {
   chat: {
     messages: ChatMessage[];
     streaming: boolean;
+    queue: ChatQueueItem[];
   };
   slides: SseSlidesData | null;
   phase: PanelPhase;

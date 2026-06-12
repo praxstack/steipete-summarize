@@ -25,7 +25,6 @@ function createHarness(
     activeTabId?: number | null;
     activeTabUrl?: string | null;
     dispatch?: boolean;
-    hydratedRunId?: string | null;
     panelState?: PanelState;
     preserveChat?: boolean;
     streaming?: boolean;
@@ -67,7 +66,6 @@ function createHarness(
       start: calls.summaryStart,
     },
     slides: {
-      getHydratedRunId: () => options.hydratedRunId ?? null,
       queueRender: calls.slidesQueueRender,
       seedPlannedRun: calls.slidesSeedPlannedRun,
       setTranscriptTimedText: calls.slidesSetTranscriptTimedText,
@@ -218,9 +216,15 @@ describe("summary run runtime", () => {
     expect(harness.calls.setPhase).toHaveBeenCalledWith("idle");
   });
 
-  it("preserves a matching hydrated slides run even without a local run record", () => {
+  it("preserves a matching active slides run", () => {
     const run = createRun({ slides: true });
-    const harness = createHarness({ hydratedRunId: run.id });
+    const panelState = createInitialPanelState();
+    panelState.slidesLifecycle.activeRun = {
+      runId: run.id,
+      url: run.url,
+      local: false,
+    };
+    const harness = createHarness({ panelState });
 
     harness.runtime.applySnapshot({ run, markdown: "Cached summary" });
 
@@ -228,7 +232,7 @@ describe("summary run runtime", () => {
       clearRunId: false,
       stopSlides: false,
     });
-    expect(harness.panelState.slidesRunId).toBeNull();
+    expect(harness.panelState.slidesRunId).toBe(run.id);
   });
 
   it("restores summary-only snapshots without carrying unrelated slides", () => {

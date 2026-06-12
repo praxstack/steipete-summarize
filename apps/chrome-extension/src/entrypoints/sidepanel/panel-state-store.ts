@@ -1,6 +1,6 @@
 import { defaultSettings } from "../../lib/settings";
 import { createInitialSlidesSessionState } from "./slides-session-state";
-import type { PanelState } from "./types";
+import type { NavigationPolicyState, PanelState } from "./types";
 
 export type PanelStateAction =
   | { type: "phase"; phase: PanelState["phase"]; error?: string | null }
@@ -11,6 +11,7 @@ export type PanelStateAction =
       url: PanelState["navigation"]["activeTabUrl"];
     }
   | { type: "active-tab-url"; url: PanelState["navigation"]["activeTabUrl"] }
+  | { type: "navigation-policy-update"; value: Partial<NavigationPolicyState> }
   | {
       type: "pending-summary-run";
       urlKey: string;
@@ -25,6 +26,8 @@ export type PanelStateAction =
   | { type: "planned-slides-run"; value: PanelState["slidesLifecycle"]["plannedRun"] }
   | { type: "slides-summary-update"; value: Partial<PanelState["slidesSummary"]> }
   | { type: "slides-summary-reset" }
+  | { type: "slides-text-update"; value: Partial<PanelState["slidesText"]> }
+  | { type: "slides-text-reset" }
   | { type: "slides-session-update"; value: Partial<PanelState["slidesSession"]> }
   | { type: "slides-context-request-next" }
   | { type: "panel-session-update"; value: Partial<PanelState["panelSession"]> }
@@ -41,6 +44,9 @@ export type PanelStateAction =
   | { type: "chat-message-add"; message: PanelState["chat"]["messages"][number] }
   | { type: "chat-message-replace"; message: PanelState["chat"]["messages"][number] }
   | { type: "chat-message-remove"; id: string }
+  | { type: "chat-queue-add"; item: PanelState["chat"]["queue"][number] }
+  | { type: "chat-queue-remove"; id: string }
+  | { type: "chat-queue-clear" }
   | {
       type: "attach-run";
       tabId: PanelState["activeRun"]["tabId"];
@@ -68,6 +74,8 @@ export function createInitialPanelState(): PanelState {
     navigation: {
       activeTabId: null,
       activeTabUrl: null,
+      lastAgentNavigation: null,
+      pendingPreserveChatForUrl: null,
     },
     activeRun: {
       tabId: null,
@@ -81,6 +89,7 @@ export function createInitialPanelState(): PanelState {
       plannedRun: null,
     },
     slidesSummary: createInitialSlidesSummaryState(),
+    slidesText: createInitialSlidesTextState(),
     slidesSession: createInitialSlidesSessionState({
       slidesEnabled: defaultSettings.slidesEnabled,
       slidesParallel: defaultSettings.slidesParallel,
@@ -107,6 +116,7 @@ export function createInitialPanelState(): PanelState {
     chat: {
       messages: [],
       streaming: false,
+      queue: [],
     },
     slides: null,
     phase: "idle",
@@ -128,6 +138,7 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
       return {
         ...state,
         navigation: {
+          ...state.navigation,
           activeTabId: action.tabId,
           activeTabUrl: action.url,
         },
@@ -138,6 +149,14 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
         navigation: {
           ...state.navigation,
           activeTabUrl: action.url,
+        },
+      };
+    case "navigation-policy-update":
+      return {
+        ...state,
+        navigation: {
+          ...state.navigation,
+          ...action.value,
         },
       };
     case "pending-summary-run":
@@ -188,6 +207,19 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
       return {
         ...state,
         slidesSummary: createInitialSlidesSummaryState(),
+      };
+    case "slides-text-update":
+      return {
+        ...state,
+        slidesText: {
+          ...state.slidesText,
+          ...action.value,
+        },
+      };
+    case "slides-text-reset":
+      return {
+        ...state,
+        slidesText: createInitialSlidesTextState(),
       };
     case "slides-session-update":
       return {
@@ -241,6 +273,7 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
         chat: {
           messages: [],
           streaming: false,
+          queue: [],
         },
       };
     case "chat-messages":
@@ -275,6 +308,30 @@ export function reducePanelState(state: PanelState, action: PanelStateAction): P
         chat: {
           ...state.chat,
           messages: state.chat.messages.filter((message) => message.id !== action.id),
+        },
+      };
+    case "chat-queue-add":
+      return {
+        ...state,
+        chat: {
+          ...state.chat,
+          queue: [...state.chat.queue, action.item],
+        },
+      };
+    case "chat-queue-remove":
+      return {
+        ...state,
+        chat: {
+          ...state.chat,
+          queue: state.chat.queue.filter((item) => item.id !== action.id),
+        },
+      };
+    case "chat-queue-clear":
+      return {
+        ...state,
+        chat: {
+          ...state.chat,
+          queue: [],
         },
       };
     case "attach-run":
@@ -327,6 +384,20 @@ function createInitialSlidesSummaryState(): PanelState["slidesSummary"] {
     hadError: false,
     complete: false,
     model: null,
+  };
+}
+
+function createInitialSlidesTextState(): PanelState["slidesText"] {
+  return {
+    mode: "transcript",
+    toggleVisible: false,
+    transcriptTimedText: null,
+    transcriptAvailable: false,
+    ocrAvailable: false,
+    descriptionsByIndex: {},
+    summariesByIndex: {},
+    titlesByIndex: {},
+    summarySource: null,
   };
 }
 

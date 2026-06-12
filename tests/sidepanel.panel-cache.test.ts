@@ -37,8 +37,9 @@ describe("panel cache controller", () => {
       complete: true,
       model: "openai/gpt-5.4",
     };
+    panelState.slidesText.transcriptTimedText = "00:00 Intro";
 
-    expect(buildPanelCachePayload(panelState, "00:00 Intro")).toMatchObject({
+    expect(buildPanelCachePayload(panelState)).toMatchObject({
       tabId: 7,
       url: "https://example.com/video",
       title: "Video",
@@ -53,7 +54,7 @@ describe("panel cache controller", () => {
   });
 
   it("skips snapshots without a tab and URL", () => {
-    expect(buildPanelCachePayload(createInitialPanelState(), null)).toBeNull();
+    expect(buildPanelCachePayload(createInitialPanelState())).toBeNull();
   });
 
   it("stores and resolves snapshots per tab", () => {

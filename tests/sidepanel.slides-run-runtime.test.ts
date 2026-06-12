@@ -156,15 +156,19 @@ describe("slides run runtime", () => {
     expect(harness.calls.startSlidesHydrator).toHaveBeenCalledWith("slides-run", { local: true });
   });
 
-  it("keeps ordinary run starts separate from panel active-run metadata", () => {
+  it("records ordinary run starts in canonical active-run state", () => {
     const harness = createHarness();
     const run = createRun();
 
     harness.runtime.startSlidesStream(run);
 
     expect(harness.panelState.slidesRunId).toBe(run.id);
-    expect(harness.panelState.slidesLifecycle.activeRun).toBeNull();
-    expect(harness.calls.startSlidesHydrator).toHaveBeenCalledWith(run.id, undefined);
+    expect(harness.panelState.slidesLifecycle.activeRun).toEqual({
+      runId: run.id,
+      url: run.url,
+      local: false,
+    });
+    expect(harness.calls.startSlidesHydrator).toHaveBeenCalledWith(run.id, { local: false });
   });
 
   it("stops all slide work when neither canonical nor UI settings allow slides", () => {

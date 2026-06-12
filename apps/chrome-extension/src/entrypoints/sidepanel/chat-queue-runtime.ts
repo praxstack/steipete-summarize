@@ -1,28 +1,26 @@
-type ChatQueueItem = {
-  id: string;
-  text: string;
-  createdAt: number;
-};
+import type { PanelStateAction } from "./panel-state-store";
+import type { PanelState } from "./types";
 
 type ChatQueueRuntimeOpts = {
+  panelState: PanelState;
+  dispatchPanelState: (action: PanelStateAction) => void;
   chatQueueEl: HTMLElement;
   maxQueue: number;
   setStatus: (value: string) => void;
 };
 
 export function createChatQueueRuntime(opts: ChatQueueRuntimeOpts) {
-  let queue: ChatQueueItem[] = [];
-
   function normalizeQueueText(input: string) {
     return input.replace(/\s+/g, " ").trim();
   }
 
   function removeQueuedMessage(id: string) {
-    queue = queue.filter((item) => item.id !== id);
+    opts.dispatchPanelState({ type: "chat-queue-remove", id });
     renderChatQueue();
   }
 
   function renderChatQueue() {
+    const queue = opts.panelState.chat.queue;
     if (queue.length === 0) {
       opts.chatQueueEl.classList.add("isHidden");
       opts.chatQueueEl.replaceChildren();
@@ -56,30 +54,36 @@ export function createChatQueueRuntime(opts: ChatQueueRuntimeOpts) {
   function enqueueChatMessage(input: string): boolean {
     const text = normalizeQueueText(input);
     if (!text) return false;
+    const queue = opts.panelState.chat.queue;
     if (queue.length >= opts.maxQueue) {
       opts.setStatus(`Queue full (${opts.maxQueue}). Remove one to add more.`);
       return false;
     }
-    queue.push({ id: crypto.randomUUID(), text, createdAt: Date.now() });
+    opts.dispatchPanelState({
+      type: "chat-queue-add",
+      item: { id: crypto.randomUUID(), text, createdAt: Date.now() },
+    });
     renderChatQueue();
     return true;
   }
 
   function clearQueuedMessages() {
-    if (queue.length === 0) return;
-    queue = [];
+    if (opts.panelState.chat.queue.length === 0) return;
+    opts.dispatchPanelState({ type: "chat-queue-clear" });
     renderChatQueue();
   }
 
   function dequeueQueuedMessage() {
-    return queue.shift();
+    const next = opts.panelState.chat.queue[0];
+    if (next) opts.dispatchPanelState({ type: "chat-queue-remove", id: next.id });
+    return next;
   }
 
   return {
     clearQueuedMessages,
     dequeueQueuedMessage,
     enqueueChatMessage,
-    getQueueLength: () => queue.length,
+    getQueueLength: () => opts.panelState.chat.queue.length,
     renderChatQueue,
   };
 }

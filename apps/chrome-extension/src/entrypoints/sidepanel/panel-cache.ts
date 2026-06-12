@@ -37,10 +37,7 @@ export type PanelCacheControllerOptions = {
   sendRequest: (request: PanelCacheRequest) => void;
 };
 
-export function buildPanelCachePayload(
-  panelState: PanelState,
-  transcriptTimedText: string | null,
-): PanelCachePayload | null {
+export function buildPanelCachePayload(panelState: PanelState): PanelCachePayload | null {
   const tabId = panelState.activeRun.tabId ?? panelState.navigation.activeTabId;
   const url = panelState.currentSource?.url ?? panelState.navigation.activeTabUrl;
   if (!tabId || !url) return null;
@@ -59,7 +56,7 @@ export function buildPanelCachePayload(
     slidesSummaryModel: hasSlidesSummaryState ? slidesSummary.model : null,
     lastMeta: panelState.lastMeta,
     slides: panelState.slides ?? null,
-    transcriptTimedText,
+    transcriptTimedText: panelState.slidesText.transcriptTimedText,
   };
 }
 

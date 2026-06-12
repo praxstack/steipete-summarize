@@ -257,7 +257,7 @@ describe("sidepanel chat controller", () => {
 
     harness.controller.reset();
 
-    expect(harness.panelState.chat).toEqual({ messages: [], streaming: false });
+    expect(harness.panelState.chat).toEqual({ messages: [], streaming: false, queue: [] });
     expect(harness.messagesEl.children).toHaveLength(0);
     expect(harness.messagesEl.classList.contains("isHidden")).toBe(true);
     expect(harness.inputEl.value).toBe("");
