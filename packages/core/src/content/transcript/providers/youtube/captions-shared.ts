@@ -33,16 +33,3 @@ export type CaptionListRenderer = Record<string, unknown> & {
   captionTracks?: unknown;
   automaticCaptions?: unknown;
 };
-export type CaptionTrackRecord = Record<string, unknown> & {
-  languageCode?: unknown;
-  kind?: unknown;
-  baseUrl?: unknown;
-  url?: unknown;
-};
-export type CaptionEventRecord = Record<string, unknown> & {
-  segs?: unknown;
-  tStartMs?: unknown;
-  dDurationMs?: unknown;
-};
-export type CaptionSegmentRecord = Record<string, unknown> & { utf8?: unknown };
-export type CaptionPayload = { events?: unknown };

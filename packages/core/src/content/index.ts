@@ -67,6 +67,18 @@ export {
 } from "./link-preview/types.js";
 export { formatTimestampMs, parseTimestampStringToMs } from "./transcript/timestamps.js";
 export {
+  buildYoutubeCaptionTrackUrls,
+  formatYoutubeCaptionLines,
+  normalizeYoutubeCaptionText,
+  parseYoutubeCaptionPayload,
+  rankYoutubeCaptionTracks,
+  resolveYoutubeCaptionTrack,
+  type YoutubeCaptionLine,
+  type YoutubeCaptionTrack,
+  type YoutubeCaptionTrackInput,
+  type YoutubeCaptionTranscript,
+} from "./youtube-captions.js";
+export {
   DIRECT_MEDIA_EXTENSIONS,
   extractYouTubeVideoId,
   inferDirectMediaKind,

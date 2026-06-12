@@ -36,6 +36,10 @@ export function createVitestConfig({
           replacement: resolve(rootDir, "packages/core/src/content/url.ts"),
         },
         {
+          find: /^@steipete\/summarize-core\/content\/youtube-captions$/,
+          replacement: resolve(rootDir, "packages/core/src/content/youtube-captions.ts"),
+        },
+        {
           find: /^@steipete\/summarize-core\/prompts$/,
           replacement: resolve(rootDir, "packages/core/src/prompts/index.ts"),
         },

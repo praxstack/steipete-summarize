@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { extractYouTubeTranscriptInTab } from "../apps/chrome-extension/src/entrypoints/background/youtube-transcript";
 import { extractYouTubePageTranscript } from "../apps/chrome-extension/src/lib/youtube-page-transcript";
 
-type ExecuteScriptOptions = Parameters<typeof chrome.scripting.executeScript>[0] & {
-  func: (limit: number, allowPanelFallback: boolean) => Promise<unknown>;
-  args: [number, boolean];
+type ExecuteScriptOptions = {
+  func: (...args: never[]) => unknown;
+  args?: unknown[];
 };
 
 const originalChrome = globalThis.chrome;
@@ -16,13 +16,6 @@ const originalScrollY = (globalThis as { scrollY?: unknown }).scrollY;
 const originalScrollTo = (globalThis as { scrollTo?: unknown }).scrollTo;
 const originalPlayerResponse = (globalThis as { ytInitialPlayerResponse?: unknown })
   .ytInitialPlayerResponse;
-
-function serializePageExtractor() {
-  return Function(`return (${extractYouTubePageTranscript.toString()})`)() as (
-    limit: number,
-    allowPanelFallback: boolean,
-  ) => Promise<unknown>;
-}
 
 function installDocumentStub(overrides: Partial<Document> = {}) {
   Object.defineProperty(globalThis, "document", {
@@ -41,9 +34,10 @@ function installExecuteScriptStub() {
     value: {
       scripting: {
         executeScript: vi.fn(async (options: ExecuteScriptOptions) => {
-          const serialized = serializePageExtractor();
-          expect(options.func.toString()).toBe(extractYouTubePageTranscript.toString());
-          return [{ result: await serialized(...options.args) }];
+          const serialized = Function(`return (${options.func.toString()})`)() as (
+            ...args: unknown[]
+          ) => unknown;
+          return [{ result: await serialized(...(options.args ?? [])) }];
         }),
       },
     },
@@ -232,6 +226,10 @@ describe("chrome youtube transcript extraction", () => {
         textContent: selector.includes("timestamp") ? "0:10" : "Stale transcript text",
       })),
     };
+    const scrollTo = vi.fn();
+    Object.defineProperty(globalThis, "scrollX", { configurable: true, value: 5 });
+    Object.defineProperty(globalThis, "scrollY", { configurable: true, value: 8 });
+    Object.defineProperty(globalThis, "scrollTo", { configurable: true, value: scrollTo });
     installDocumentStub({
       querySelector: vi.fn((selector: string) =>
         selector === "ytd-watch-metadata"
@@ -246,6 +244,7 @@ describe("chrome youtube transcript extraction", () => {
     const result = await extractYouTubeTranscriptInTab(7, 10_000);
 
     expect(result).toEqual({ ok: false, error: "No YouTube caption transcript found." });
+    expect(scrollTo).toHaveBeenCalledWith(5, 8);
   });
 
   it("reports wrapper failures", async () => {
@@ -430,7 +429,7 @@ describe("chrome youtube transcript extraction", () => {
       querySelectorAll: vi.fn(() => [button]) as unknown as Document["querySelectorAll"],
     });
 
-    const result = await serializePageExtractor()(10_000, false);
+    const result = await extractYouTubePageTranscript(10_000, false);
 
     expect(result).toEqual({ ok: false, error: "No YouTube caption transcript found." });
     expect(button.click).not.toHaveBeenCalled();

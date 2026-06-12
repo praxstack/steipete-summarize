@@ -1,5 +1,8 @@
 import {
-  extractYouTubePageTranscript,
+  fetchYouTubeCaptionText,
+  readYouTubePageCaptionSource,
+  readYouTubeTranscriptPanel,
+  resolveYouTubePageTranscript,
   type BrowserYouTubeTranscript,
 } from "../../lib/youtube-page-transcript";
 
@@ -8,40 +11,9 @@ export async function hasYouTubeCaptionTracksInTab(tabId: number): Promise<boole
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
       world: "MAIN",
-      func: () => {
-        type PlayerResponse = {
-          captions?: {
-            playerCaptionsTracklistRenderer?: { captionTracks?: unknown[] };
-          };
-          videoDetails?: { videoId?: unknown };
-        };
-        const asPlayer = (value: unknown): PlayerResponse | null =>
-          value && typeof value === "object" ? (value as PlayerResponse) : null;
-        const activeVideoId =
-          new URL(location.href).searchParams.get("v") ??
-          location.pathname.match(/^\/shorts\/([^/?#]+)/)?.[1] ??
-          null;
-        const globals = globalThis as typeof globalThis & {
-          ytInitialPlayerResponse?: unknown;
-        };
-        const flexy = document.querySelector("ytd-watch-flexy") as
-          | (Element & { playerData?: unknown; playerResponse?: unknown })
-          | null;
-        const moviePlayer = document.querySelector("#movie_player") as
-          | (Element & { getPlayerResponse?: () => unknown })
-          | null;
-        const candidates = [
-          asPlayer(moviePlayer?.getPlayerResponse?.()),
-          asPlayer(flexy?.playerData),
-          asPlayer(flexy?.playerResponse),
-          asPlayer(globals.ytInitialPlayerResponse),
-        ].filter((value): value is PlayerResponse => Boolean(value));
-        const player =
-          candidates.find((candidate) => candidate.videoDetails?.videoId === activeVideoId) ?? null;
-        return Boolean(player?.captions?.playerCaptionsTracklistRenderer?.captionTracks?.length);
-      },
+      func: readYouTubePageCaptionSource,
     });
-    return result?.result !== false;
+    return (result?.result.tracks.length ?? 0) > 0;
   } catch {
     return true;
   }
@@ -52,13 +24,34 @@ export async function extractYouTubeTranscriptInTab(
   maxChars: number,
 ): Promise<BrowserYouTubeTranscript> {
   try {
-    const [result] = await chrome.scripting.executeScript({
+    const [sourceResult] = await chrome.scripting.executeScript({
       target: { tabId },
       world: "MAIN",
-      args: [maxChars, true],
-      func: extractYouTubePageTranscript,
+      func: readYouTubePageCaptionSource,
     });
-    return result.result ?? { ok: false, error: "No transcript result returned." };
+    const source = sourceResult?.result;
+    if (!source) return { ok: false, error: "No transcript result returned." };
+    return await resolveYouTubePageTranscript({
+      source,
+      limit: maxChars,
+      loadCaptionText: async (url) => {
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: "MAIN",
+          args: [url],
+          func: fetchYouTubeCaptionText,
+        });
+        return result?.result ?? null;
+      },
+      loadPanel: async () => {
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: "MAIN",
+          func: readYouTubeTranscriptPanel,
+        });
+        return result?.result ?? null;
+      },
+    });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

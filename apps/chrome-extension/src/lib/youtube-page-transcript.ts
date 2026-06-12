@@ -1,3 +1,11 @@
+import {
+  formatYoutubeCaptionLines,
+  normalizeYoutubeCaptionText,
+  parseTimestampStringToMs,
+  rankYoutubeCaptionTracks,
+  resolveYoutubeCaptionTrack,
+} from "@steipete/summarize-core/content/youtube-captions";
+
 export type BrowserYouTubeTranscript =
   | {
       ok: true;
@@ -9,11 +17,24 @@ export type BrowserYouTubeTranscript =
     }
   | { ok: false; error: string };
 
+export type BrowserYouTubeCaptionSource = {
+  url: string;
+  durationSeconds: number | null;
+  tracks: Array<{
+    baseUrl: string;
+    languageCode: string;
+    kind: string;
+    label: string;
+  }>;
+};
+
+export type BrowserYouTubeTranscriptPanel = {
+  url: string;
+  lines: Array<{ timestamp: string | null; text: string }>;
+};
+
 // Keep this function self-contained: Chrome serializes it for MAIN-world injection.
-export async function extractYouTubePageTranscript(
-  limit: number,
-  allowPanelFallback = true,
-): Promise<BrowserYouTubeTranscript> {
+export function readYouTubePageCaptionSource(): BrowserYouTubeCaptionSource {
   type CaptionTrack = {
     baseUrl?: unknown;
     languageCode?: unknown;
@@ -27,143 +48,18 @@ export async function extractYouTubePageTranscript(
     videoDetails?: { lengthSeconds?: unknown; videoId?: unknown };
   };
 
-  const clampText = (text: string, maxLength: number) => {
-    if (text.length <= maxLength) return { text, truncated: false };
-    return {
-      text: `${text.slice(0, Math.max(0, maxLength - 24))}\n\n[TRUNCATED]`,
-      truncated: true,
-    };
-  };
-  const labelForTrack = (track: CaptionTrack) => {
-    if (typeof track.name?.simpleText === "string") return track.name.simpleText;
-    if (Array.isArray(track.name?.runs)) {
-      return track.name.runs
-        .map((run) => (typeof run.text === "string" ? run.text : ""))
-        .join("")
-        .trim();
-    }
-    return "";
-  };
-  const sortCaptionTracks = (tracks: CaptionTrack[]) => {
-    const score = (track: CaptionTrack) => {
-      const language =
-        typeof track.languageCode === "string" ? track.languageCode.toLowerCase() : "";
-      const label = labelForTrack(track).toLowerCase();
-      const isAutomatic = track.kind === "asr" || label.includes("auto-generated");
-      return [
-        language === "en" || language.startsWith("en-") ? 0 : 10,
-        isAutomatic ? 1 : 0,
-        label.includes("english") ? 0 : 1,
-      ].join(":");
-    };
-    return tracks
-      .filter((track) => typeof track.baseUrl === "string")
-      .sort((left, right) => score(left).localeCompare(score(right)));
-  };
-  const formatTimestamp = (ms: number) => {
-    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    const two = (value: number) => String(value).padStart(2, "0");
-    return hours > 0 ? `${hours}:${two(minutes)}:${two(seconds)}` : `${minutes}:${two(seconds)}`;
-  };
-  const normalizeCaptionText = (text: string) =>
-    text
-      .replace(/\s+/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .trim();
-  const parseJson3 = (raw: string) => {
-    const data = JSON.parse(raw) as {
-      events?: Array<{ tStartMs?: number; segs?: Array<{ utf8?: string }> }>;
-    };
-    return (data.events ?? [])
-      .map((event) => ({
-        startMs: typeof event.tStartMs === "number" ? event.tStartMs : null,
-        text: normalizeCaptionText((event.segs ?? []).map((seg) => seg.utf8 ?? "").join("")),
-      }))
-      .filter((line) => line.text.length > 0);
-  };
-  const parseXml = (raw: string) =>
-    Array.from(new DOMParser().parseFromString(raw, "text/xml").querySelectorAll("text"))
-      .map((node) => {
-        const start = Number(node.getAttribute("start"));
-        return {
-          startMs: Number.isFinite(start) ? Math.round(start * 1000) : null,
-          text: normalizeCaptionText(node.textContent ?? ""),
-        };
-      })
-      .filter((line) => line.text.length > 0);
-  const parseVtt = (raw: string) => {
-    const lines: Array<{ startMs: number | null; text: string }> = [];
-    let pendingStart: number | null = null;
-    let pendingText: string[] = [];
-    const flush = () => {
-      const text = normalizeCaptionText(pendingText.join(" "));
-      if (text) lines.push({ startMs: pendingStart, text });
-      pendingStart = null;
-      pendingText = [];
-    };
-    for (const line of raw.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        flush();
-        continue;
-      }
-      const timing = trimmed.match(/^(\d{2}:)?(\d{2}):(\d{2})\.(\d{3})\s+-->/);
-      if (timing) {
-        flush();
-        const parts = trimmed.split(/\s+-->\s+/)[0].split(":");
-        const secondsPart = parts.pop() ?? "0";
-        const minutes = Number(parts.pop() ?? "0");
-        const hours = Number(parts.pop() ?? "0");
-        const seconds = Number(secondsPart);
-        pendingStart = Math.round(((hours * 60 + minutes) * 60 + seconds) * 1000);
-        continue;
-      }
-      if (trimmed === "WEBVTT" || /^\d+$/.test(trimmed)) continue;
-      pendingText.push(trimmed);
-    }
-    flush();
-    return lines;
-  };
-  const captionUrls = (baseUrl: string) => {
-    const withFormat = (format: string) => {
-      const url = new URL(baseUrl);
-      url.searchParams.set("fmt", format);
-      return url.toString();
-    };
-    return Array.from(new Set([withFormat("json3"), baseUrl, withFormat("vtt")]));
-  };
-  const fetchWithTimeout = async (url: string, timeoutMs = 5000) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const activeVideoId = (() => {
     try {
-      return await fetch(url, { signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
+      const url = new URL(location.href);
+      return url.searchParams.get("v") ?? url.pathname.match(/^\/shorts\/([^/?#]+)/)?.[1] ?? null;
+    } catch {
+      return null;
     }
-  };
-  const fetchLines = async (track: CaptionTrack) => {
-    if (typeof track.baseUrl !== "string") return [];
-    for (const url of captionUrls(track.baseUrl)) {
-      try {
-        const res = await fetchWithTimeout(url);
-        if (!res.ok) continue;
-        const raw = (await res.text()).trim();
-        if (!raw) continue;
-        const lines = raw.startsWith("{")
-          ? parseJson3(raw)
-          : raw.startsWith("WEBVTT")
-            ? parseVtt(raw)
-            : parseXml(raw);
-        if (lines.length > 0) return lines;
-      } catch {
-        // Try the next track/format.
-      }
-    }
-    return [];
-  };
+  })();
+  const asObject = (value: unknown) =>
+    value && typeof value === "object" ? (value as PlayerResponse) : undefined;
+  const hasCaptionTracks = (player: PlayerResponse | undefined) =>
+    Boolean(player?.captions?.playerCaptionsTracklistRenderer?.captionTracks?.length);
   const findBalancedJsonAfter = (source: string, marker: string) => {
     const markerIndex = source.indexOf(marker);
     if (markerIndex < 0) return null;
@@ -175,13 +71,9 @@ export async function extractYouTubePageTranscript(
     for (let index = start; index < source.length; index += 1) {
       const char = source[index];
       if (inString) {
-        if (escape) {
-          escape = false;
-        } else if (char === "\\") {
-          escape = true;
-        } else if (char === '"') {
-          inString = false;
-        }
+        if (escape) escape = false;
+        else if (char === "\\") escape = true;
+        else if (char === '"') inString = false;
         continue;
       }
       if (char === '"') {
@@ -196,18 +88,6 @@ export async function extractYouTubePageTranscript(
     }
     return null;
   };
-  const activeVideoId = (() => {
-    try {
-      const url = new URL(location.href);
-      return url.searchParams.get("v") ?? url.pathname.match(/^\/shorts\/([^/?#]+)/)?.[1] ?? null;
-    } catch {
-      return null;
-    }
-  })();
-  const asObject = (value: unknown) =>
-    value && typeof value === "object" ? (value as PlayerResponse) : undefined;
-  const hasCaptionTracks = (player: PlayerResponse | undefined) =>
-    Boolean(player?.captions?.playerCaptionsTracklistRenderer?.captionTracks?.length);
   const isCurrentPlayer = (player: PlayerResponse | undefined, requireVideoId: boolean) => {
     if (!player || !activeVideoId) return Boolean(player);
     const playerVideoId = player.videoDetails?.videoId;
@@ -220,7 +100,11 @@ export async function extractYouTubePageTranscript(
   const flexy = document.querySelector("ytd-watch-flexy") as
     | (Element & { playerData?: unknown; playerResponse?: unknown })
     | null;
+  const moviePlayer = document.querySelector("#movie_player") as
+    | (Element & { getPlayerResponse?: () => unknown })
+    | null;
   const playerCandidates = [
+    asObject(moviePlayer?.getPlayerResponse?.()),
     asObject(flexy?.playerData),
     asObject(flexy?.playerResponse),
     asObject(globalData.ytInitialPlayerResponse),
@@ -254,73 +138,87 @@ export async function extractYouTubePageTranscript(
     typeof player?.videoDetails?.lengthSeconds === "string"
       ? Number(player.videoDetails.lengthSeconds)
       : null;
-  const durationSeconds = Number.isFinite(duration) ? duration : null;
-  const buildResult = (
-    raw: string,
-  ): Extract<BrowserYouTubeTranscript, { ok: true }> | { ok: false; error: string } => {
-    const normalized = raw.trim();
-    if (!normalized) return { ok: false, error: "No YouTube caption transcript found." };
-    const clamped = clampText(`Transcript:\n${normalized}`, limit);
-    const timed = clampText(normalized, limit);
-    return {
-      ok: true,
-      url: location.href,
-      text: clamped.text,
-      transcriptTimedText: timed.text,
-      truncated: clamped.truncated,
-      durationSeconds,
-    };
-  };
-
   const tracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-  for (const track of sortCaptionTracks(tracks)) {
-    const lines = await fetchLines(track);
-    if (lines.length === 0) continue;
-    return buildResult(
-      lines
-        .map((line) =>
-          typeof line.startMs === "number"
-            ? `[${formatTimestamp(line.startMs)}] ${line.text}`
-            : line.text,
-        )
-        .join("\n"),
-    );
-  }
+  return {
+    url: location.href,
+    durationSeconds: Number.isFinite(duration) ? duration : null,
+    tracks: tracks.flatMap((track) => {
+      if (typeof track.baseUrl !== "string") return [];
+      const label =
+        typeof track.name?.simpleText === "string"
+          ? track.name.simpleText
+          : Array.isArray(track.name?.runs)
+            ? track.name.runs
+                .map((run) => (typeof run.text === "string" ? run.text : ""))
+                .join("")
+                .trim()
+            : "";
+      return [
+        {
+          baseUrl: track.baseUrl,
+          languageCode:
+            typeof track.languageCode === "string" ? track.languageCode.toLowerCase() : "",
+          kind: typeof track.kind === "string" ? track.kind.toLowerCase() : "",
+          label,
+        },
+      ];
+    }),
+  };
+}
 
-  if (!allowPanelFallback) {
-    return { ok: false, error: "No YouTube caption transcript found." };
+// Keep this function self-contained: Chrome serializes it for MAIN-world injection.
+export async function fetchYouTubeCaptionText(url: string): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return null;
+    const raw = await response.text();
+    return raw.trim() ? raw : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
+}
 
+// Keep this function self-contained: Chrome serializes it for MAIN-world injection.
+export async function readYouTubeTranscriptPanel(): Promise<BrowserYouTubeTranscriptPanel | null> {
+  const normalize = (text: string) =>
+    text
+      .replace(/\s+/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .trim();
   const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  const parseTranscriptPanel = () => {
+  const parsePanel = () => {
     const segments = Array.from(
       document.querySelectorAll("ytd-transcript-segment-renderer, transcript-segment-view-model"),
     );
     return segments
       .map((segment) => {
-        const textEl = segment.querySelector(
+        const textElement = segment.querySelector(
           "#segment-text, .segment-text, .ytAttributedStringHost[role='text'], span[role='text']",
         );
-        const timestampEl = segment.querySelector(
+        const timestampElement = segment.querySelector(
           "#timestamp, .segment-timestamp, .ytwTranscriptSegmentViewModelTimestamp",
         );
-        const text = normalizeCaptionText(textEl?.textContent ?? "");
-        const timestamp = normalizeCaptionText(timestampEl?.textContent ?? "");
-        const timestampMatch = timestamp.match(/^\d{1,2}:\d{2}(?::\d{2})?$/);
+        const text = normalize(textElement?.textContent ?? "");
+        const timestamp = normalize(timestampElement?.textContent ?? "");
         return {
-          timestamp: timestampMatch ? timestamp : null,
+          timestamp: /^\d{1,2}:\d{2}(?::\d{2})?$/.test(timestamp) ? timestamp : null,
           text,
         };
       })
       .filter((line) => line.text.length > 0);
   };
-  const clickTranscriptButton = async () => {
+  const buttons = () =>
+    Array.from(document.querySelectorAll("button, tp-yt-paper-button, ytd-button-renderer"));
+  const scrollBefore = { x: globalThis.scrollX ?? 0, y: globalThis.scrollY ?? 0 };
+  try {
     document.querySelector("ytd-watch-metadata")?.scrollIntoView({ block: "center" });
     await delay(120);
-    const buttons = () =>
-      Array.from(document.querySelectorAll("button, tp-yt-paper-button, ytd-button-renderer"));
     const expand = buttons().find((element) =>
-      /\bmore\b/i.test(normalizeCaptionText(element.textContent ?? "")),
+      /\bmore\b/i.test(normalize(element.textContent ?? "")),
     ) as HTMLElement | undefined;
     expand?.click();
     await delay(250);
@@ -328,38 +226,103 @@ export async function extractYouTubePageTranscript(
       "ytd-video-description-transcript-section-renderer button",
     ) ??
       buttons().find((element) =>
-        /show transcript/i.test(normalizeCaptionText(element.textContent ?? "")),
+        /show transcript/i.test(normalize(element.textContent ?? "")),
       )) as HTMLElement | undefined;
-    if (!transcriptButton) return false;
+    if (!transcriptButton) return null;
     transcriptButton.click();
     for (let attempt = 0; attempt < 20; attempt += 1) {
       await delay(200);
-      if (parseTranscriptPanel().length > 0) return true;
+      const lines = parsePanel();
+      if (lines.length > 0) return { url: location.href, lines };
     }
-    return false;
-  };
-  const pageWindow = globalThis as typeof globalThis & {
-    scrollX?: number;
-    scrollY?: number;
-    scrollTo?: (x: number, y: number) => void;
-  };
-  const scrollBeforeFallback = {
-    x: pageWindow.scrollX ?? 0,
-    y: pageWindow.scrollY ?? 0,
-  };
-  try {
-    if (await clickTranscriptButton()) {
-      const panelLines = parseTranscriptPanel();
-      if (panelLines.length > 0) {
-        return buildResult(
-          panelLines
-            .map((line) => (line.timestamp ? `[${line.timestamp}] ${line.text}` : line.text))
-            .join("\n"),
-        );
-      }
-    }
+    return null;
   } finally {
-    pageWindow.scrollTo?.(scrollBeforeFallback.x, scrollBeforeFallback.y);
+    globalThis.scrollTo?.(scrollBefore.x, scrollBefore.y);
+  }
+}
+
+function clampText(text: string, maxLength: number) {
+  if (text.length <= maxLength) return { text, truncated: false };
+  return {
+    text: `${text.slice(0, Math.max(0, maxLength - 24))}\n\n[TRUNCATED]`,
+    truncated: true,
+  };
+}
+
+function buildTranscriptResult({
+  source,
+  raw,
+  limit,
+}: {
+  source: BrowserYouTubeCaptionSource;
+  raw: string;
+  limit: number;
+}): BrowserYouTubeTranscript {
+  const normalized = raw.trim();
+  if (!normalized) return { ok: false, error: "No YouTube caption transcript found." };
+  const clamped = clampText(`Transcript:\n${normalized}`, limit);
+  const timed = clampText(normalized, limit);
+  return {
+    ok: true,
+    url: source.url,
+    text: clamped.text,
+    transcriptTimedText: timed.text,
+    truncated: clamped.truncated,
+    durationSeconds: source.durationSeconds,
+  };
+}
+
+export async function resolveYouTubePageTranscript({
+  source,
+  limit,
+  loadCaptionText,
+  loadPanel = null,
+}: {
+  source: BrowserYouTubeCaptionSource;
+  limit: number;
+  loadCaptionText: (url: string) => Promise<string | null>;
+  loadPanel?: (() => Promise<BrowserYouTubeTranscriptPanel | null>) | null;
+}): Promise<BrowserYouTubeTranscript> {
+  const tracks = rankYoutubeCaptionTracks({
+    captionTracks: source.tracks,
+    priority: "english-first",
+  });
+  for (const track of tracks) {
+    const transcript = await resolveYoutubeCaptionTrack(track.baseUrl, loadCaptionText);
+    if (!transcript) continue;
+    return buildTranscriptResult({
+      source,
+      raw: formatYoutubeCaptionLines(transcript.lines),
+      limit,
+    });
+  }
+
+  const panel = await loadPanel?.();
+  if (panel?.lines.length) {
+    return buildTranscriptResult({
+      source: { ...source, url: panel.url },
+      raw: formatYoutubeCaptionLines(
+        panel.lines.map((line) => ({
+          startMs: line.timestamp ? parseTimestampStringToMs(line.timestamp) : null,
+          endMs: null,
+          text: normalizeYoutubeCaptionText(line.text),
+        })),
+      ),
+      limit,
+    });
   }
   return { ok: false, error: "No YouTube caption transcript found." };
+}
+
+export async function extractYouTubePageTranscript(
+  limit: number,
+  allowPanelFallback = true,
+): Promise<BrowserYouTubeTranscript> {
+  const source = readYouTubePageCaptionSource();
+  return resolveYouTubePageTranscript({
+    source,
+    limit,
+    loadCaptionText: fetchYouTubeCaptionText,
+    loadPanel: allowPanelFallback ? readYouTubeTranscriptPanel : null,
+  });
 }

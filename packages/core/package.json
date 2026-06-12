@@ -31,6 +31,10 @@
       "types": "./dist/types/content/youtube.d.ts",
       "import": "./dist/esm/content/youtube.js"
     },
+    "./content/youtube-captions": {
+      "types": "./dist/types/content/youtube-captions.d.ts",
+      "import": "./dist/esm/content/youtube-captions.js"
+    },
     "./prompts": {
       "types": "./dist/types/prompts/index.d.ts",
       "import": "./dist/esm/prompts/index.js"
