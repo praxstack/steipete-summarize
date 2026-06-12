@@ -6,9 +6,9 @@ import {
   handleHelpRequest,
   handleRefreshFreeRequest,
 } from "./cli-preflight.js";
+import { executeCliSummarizeCommand } from "./cli-summarize-command.js";
 import { attachRichHelp, buildProgram } from "./help.js";
 import { createPerfTrace } from "./perf-trace.js";
-import { createRunnerPlan } from "./runner-plan.js";
 import {
   applyWidthOverride,
   handleCacheUtilityFlags,
@@ -85,7 +85,7 @@ export async function runCli(
     ) {
       return;
     }
-    const plan = await createRunnerPlan({
+    await executeCliSummarizeCommand({
       normalizedArgv,
       program,
       env,
@@ -98,13 +98,6 @@ export async function runCli(
       promptOverride,
       perfTrace,
     });
-    perfTrace?.mark("cli:planned");
-
-    try {
-      await plan.execute();
-    } finally {
-      plan.cacheState.store?.close();
-    }
   } finally {
     perfTrace?.finish();
   }

@@ -2,7 +2,6 @@ import type { Command } from "commander";
 import { createSummarizeExecutionResources } from "../application/execution-resources.js";
 import { isTranscribableAssetPath } from "../application/input-acquisition.js";
 import { resolveSummarizeRun } from "../application/run-spec.js";
-import { type CacheState } from "../cache.js";
 import type { ExecFileFn } from "../markitdown.js";
 import { resolveSpeakerIdentificationSettings } from "../speaker-identification/index.js";
 import {
@@ -26,12 +25,7 @@ import { resolveRunnerSlidesSettings } from "./runner-slides.js";
 import { createTerminalSummaryStream } from "./summary-stream.js";
 import { isRichTty, supportsColor } from "./terminal.js";
 
-export type RunnerPlan = {
-  cacheState: CacheState;
-  execute: () => Promise<void>;
-};
-
-export async function createRunnerPlan(options: {
+export async function executeCliSummarizeCommand(options: {
   normalizedArgv: string[];
   program: Command;
   env: Record<string, string | undefined>;
@@ -43,7 +37,7 @@ export async function createRunnerPlan(options: {
   stderr: NodeJS.WritableStream;
   promptOverride: string | null;
   perfTrace?: PerfTrace | null;
-}): Promise<RunnerPlan> {
+}): Promise<void> {
   const {
     normalizedArgv,
     program,
@@ -194,183 +188,183 @@ export async function createRunnerPlan(options: {
     noCacheFlag,
     transcriptNamespace,
   });
-  const mediaCache = await createMediaCacheFromConfig({
-    envForRun,
-    config,
-    noMediaCacheFlag,
-  });
-  perfTrace?.mark("plan:cache");
+  try {
+    const mediaCache = await createMediaCacheFromConfig({
+      envForRun,
+      config,
+      noMediaCacheFlag,
+    });
+    perfTrace?.mark("plan:cache");
 
-  if (markdownModeExplicitlySet && format !== "markdown") {
-    throw new Error("--markdown-mode is only supported with --format md");
-  }
-  if (
-    markdownModeExplicitlySet &&
-    inputTarget.kind !== "url" &&
-    inputTarget.kind !== "file" &&
-    inputTarget.kind !== "stdin"
-  ) {
-    throw new Error("--markdown-mode is only supported for URL, file, or stdin inputs");
-  }
-  if (
-    markdownModeExplicitlySet &&
-    (inputTarget.kind === "file" || inputTarget.kind === "stdin") &&
-    markdownMode !== "llm"
-  ) {
-    throw new Error(
-      "Only --markdown-mode llm is supported for file/stdin inputs; other modes require a URL",
-    );
-  }
+    if (markdownModeExplicitlySet && format !== "markdown") {
+      throw new Error("--markdown-mode is only supported with --format md");
+    }
+    if (
+      markdownModeExplicitlySet &&
+      inputTarget.kind !== "url" &&
+      inputTarget.kind !== "file" &&
+      inputTarget.kind !== "stdin"
+    ) {
+      throw new Error("--markdown-mode is only supported for URL, file, or stdin inputs");
+    }
+    if (
+      markdownModeExplicitlySet &&
+      (inputTarget.kind === "file" || inputTarget.kind === "stdin") &&
+      markdownMode !== "llm"
+    ) {
+      throw new Error(
+        "Only --markdown-mode llm is supported for file/stdin inputs; other modes require a URL",
+      );
+    }
 
-  const verboseColor = supportsColor(stderr, envForRun);
-  const themeForStderr = createThemeRenderer({
-    themeName,
-    enabled: verboseColor,
-    trueColor: resolveTrueColor(envForRun),
-  });
-  const { streamingEnabled } = resolveStreamSettings({
-    streamMode,
-    stdout,
-    json,
-    extractMode,
-  });
-
-  const progressEnabled = isRichTty(stderr) && !verbose && !json;
-  const progressGate = createProgressGate();
-  const {
-    clearProgressForStdout,
-    restoreProgressAfterStdout,
-    setClearProgressBeforeStdout,
-    clearProgressIfCurrent,
-  } = progressGate;
-
-  const requestOptions = {
-    openaiRequestOptions,
-    openaiRequestOptionsOverride,
-    cliReasoningEffortOverride,
-  };
-  const summaryStream = streamingEnabled
-    ? createTerminalSummaryStream({
-        stdout,
-        env,
-        envForRun,
-        plain,
-        clearProgressForStdout,
-        restoreProgressAfterStdout,
-      })
-    : null;
-  const writeViaFooter = (parts: string[]) => {
-    if (json || extractMode) return;
-    const filtered = parts.map((part) => part.trim()).filter(Boolean);
-    if (filtered.length === 0) return;
-    clearProgressForStdout();
-    stderr.write(`${themeForStderr.dim(`via ${filtered.join(", ")}`)}\n`);
-    restoreProgressAfterStdout?.();
-  };
-  const executionResources = createSummarizeExecutionResources({
-    resolvedRun,
-    env,
-    metricsEnv: env,
-    fetchImpl,
-    execFileImpl,
-    cacheState,
-    mediaCache,
-    stdout,
-    stderr,
-    summaryStream,
-    requestOptions,
-    flow: {
-      runStartedAtMs,
-      streamingEnabled,
-      extractMode,
-      maxExtractCharacters: extractMode ? maxExtractCharacters : null,
-      transcriptTimestamps,
-      speakerIdentification,
-      summaryCacheBypass: noCacheFlag,
-      json,
-      metricsEnabled,
-      metricsDetailed,
-      shouldComputeReport,
-      verbose,
-      verboseColor,
-      progressEnabled,
+    const verboseColor = supportsColor(stderr, envForRun);
+    const themeForStderr = createThemeRenderer({
+      themeName,
+      enabled: verboseColor,
+      trueColor: resolveTrueColor(envForRun),
+    });
+    const { streamingEnabled } = resolveStreamSettings({
       streamMode,
-      plain,
-      slides: slidesSettings,
-      slidesDebug,
-      slidesOutput: true,
-      throwOnAssetLikeHtmlError: true,
-    },
-    adapterHooks: {
-      writeViaFooter,
+      stdout,
+      json,
+      extractMode,
+    });
+
+    const progressEnabled = isRichTty(stderr) && !verbose && !json;
+    const progressGate = createProgressGate();
+    const {
       clearProgressForStdout,
       restoreProgressAfterStdout,
       setClearProgressBeforeStdout,
       clearProgressIfCurrent,
-    },
-    log: (message) => writeVerbose(stderr, verbose, message, verboseColor, envForRun),
-    trace: (name, detail) => perfTrace?.mark(name, detail),
-    perfTrace,
-  });
-  const { apiStatus } = executionResources.modelResources.runtime;
-  const { assetSummaryContext } = executionResources;
-  const summarizeRuntime = {
-    runId: `cli-${runStartedAtMs}`,
-    env,
-    fetch: fetchImpl,
-    execFile: execFileImpl,
-    cache: executionResources.cacheState,
-    mediaCache,
-    stdin: stdin ?? process.stdin,
-  };
-  const request = {
-    ...summarizeResolution.request,
-    input:
-      summarizeResolution.request.input.kind === "input-url"
-        ? {
-            ...summarizeResolution.request.input,
-            maxCharacters: extractMode ? maxExtractCharacters : null,
-          }
-        : summarizeResolution.request.input,
-    slides: slidesSettings,
-  };
-  const inputProgress = createCliInputProgress({
-    env,
-    envForRun,
-    stderr,
-    enabled: progressEnabled,
-    progressGate,
-  });
-  const execute = createCliSummarizeExecutor({
-    request,
-    runtime: summarizeRuntime,
-    prepared: executionResources,
-    presentationContext: assetSummaryContext,
-    progress: inputProgress,
-    extractionOutputContext: {
-      io: { env, envForRun, stdout, stderr },
-      flags: {
-        timeoutMs,
-        preprocessMode,
-        format,
-        plain,
+    } = progressGate;
+
+    const requestOptions = {
+      openaiRequestOptions,
+      openaiRequestOptionsOverride,
+      cliReasoningEffortOverride,
+    };
+    const summaryStream = streamingEnabled
+      ? createTerminalSummaryStream({
+          stdout,
+          env,
+          envForRun,
+          plain,
+          clearProgressForStdout,
+          restoreProgressAfterStdout,
+        })
+      : null;
+    const writeViaFooter = (parts: string[]) => {
+      if (json || extractMode) return;
+      const filtered = parts.map((part) => part.trim()).filter(Boolean);
+      if (filtered.length === 0) return;
+      clearProgressForStdout();
+      stderr.write(`${themeForStderr.dim(`via ${filtered.join(", ")}`)}\n`);
+      restoreProgressAfterStdout?.();
+    };
+    const executionResources = createSummarizeExecutionResources({
+      resolvedRun,
+      env,
+      metricsEnv: env,
+      fetchImpl,
+      execFileImpl,
+      cacheState,
+      mediaCache,
+      stdout,
+      stderr,
+      summaryStream,
+      requestOptions,
+      flow: {
+        runStartedAtMs,
+        streamingEnabled,
+        extractMode,
+        maxExtractCharacters: extractMode ? maxExtractCharacters : null,
+        transcriptTimestamps,
+        speakerIdentification,
+        summaryCacheBypass: noCacheFlag,
         json,
         metricsEnabled,
         metricsDetailed,
+        shouldComputeReport,
+        verbose,
         verboseColor,
+        progressEnabled,
+        streamMode,
+        plain,
+        slides: slidesSettings,
+        slidesDebug,
+        slidesOutput: true,
+        throwOnAssetLikeHtmlError: true,
       },
-      hooks: {
+      adapterHooks: {
+        writeViaFooter,
         clearProgressForStdout,
         restoreProgressAfterStdout,
+        setClearProgressBeforeStdout,
+        clearProgressIfCurrent,
       },
-      apiStatus,
-    },
-  });
+      log: (message) => writeVerbose(stderr, verbose, message, verboseColor, envForRun),
+      trace: (name, detail) => perfTrace?.mark(name, detail),
+      perfTrace,
+    });
+    const { apiStatus } = executionResources.modelResources.runtime;
+    const { assetSummaryContext } = executionResources;
+    const summarizeRuntime = {
+      runId: `cli-${runStartedAtMs}`,
+      env,
+      fetch: fetchImpl,
+      execFile: execFileImpl,
+      cache: executionResources.cacheState,
+      mediaCache,
+      stdin: stdin ?? process.stdin,
+    };
+    const request = {
+      ...summarizeResolution.request,
+      input:
+        summarizeResolution.request.input.kind === "input-url"
+          ? {
+              ...summarizeResolution.request.input,
+              maxCharacters: extractMode ? maxExtractCharacters : null,
+            }
+          : summarizeResolution.request.input,
+      slides: slidesSettings,
+    };
+    const inputProgress = createCliInputProgress({
+      env,
+      envForRun,
+      stderr,
+      enabled: progressEnabled,
+      progressGate,
+    });
+    const execute = createCliSummarizeExecutor({
+      request,
+      runtime: summarizeRuntime,
+      prepared: executionResources,
+      presentationContext: assetSummaryContext,
+      progress: inputProgress,
+      extractionOutputContext: {
+        io: { env, envForRun, stdout, stderr },
+        flags: {
+          timeoutMs,
+          preprocessMode,
+          format,
+          plain,
+          json,
+          metricsEnabled,
+          metricsDetailed,
+          verboseColor,
+        },
+        hooks: {
+          clearProgressForStdout,
+          restoreProgressAfterStdout,
+        },
+        apiStatus,
+      },
+    });
 
-  return {
-    cacheState,
-    execute: async () => {
-      await execute();
-    },
-  };
+    perfTrace?.mark("cli:planned");
+    await execute();
+  } finally {
+    cacheState.store?.close();
+  }
 }
