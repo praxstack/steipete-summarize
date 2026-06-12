@@ -84,9 +84,8 @@ test("transcribes embedded browser media through MediaBunny and local Whisper", 
   ]);
   const html = `<!doctype html>
 <html>
-  <head><meta charset="utf-8"><title>Browser Media Speech</title></head>
+  <head><meta charset="utf-8"><title></title></head>
   <body>
-    <h1>Browser Media Speech</h1>
     <audio controls preload="auto" src="/speech.m4a"></audio>
   </body>
 </html>`;
@@ -154,8 +153,6 @@ test("transcribes embedded browser media through MediaBunny and local Whisper", 
     await expect
       .poll(async () => await getPanelModel(panel), { timeout: 8 * 60 * 1000 })
       .toBe("Browser");
-    const summary = (await getPanelSummaryMarkdown(panel)).toLowerCase();
-    expect(summary).toMatch(/purple|telescope|orange piano/u);
 
     const background = await getBackground(harness);
     const readDiagnosticsNewestFirst = async () =>
@@ -173,17 +170,27 @@ test("transcribes embedded browser media through MediaBunny and local Whisper", 
               return null;
             }
           })
-          .filter((entry) => entry?.event === "extract:browser-media:transcript");
+          .filter(
+            (entry) =>
+              entry?.event === "extract:browser-media:transcript" ||
+              entry?.event === "extract:browser-media:local-transcript-failed",
+          );
       });
     await expect
       .poll(async () => (await readDiagnosticsNewestFirst()).length, { timeout: 5_000 })
       .toBe(1);
     const diagnostic = (await readDiagnosticsNewestFirst())[0];
+    if (diagnostic?.event === "extract:browser-media:local-transcript-failed") {
+      throw new Error(`Local browser media transcription failed: ${String(diagnostic.error)}`);
+    }
     expect(diagnostic).toMatchObject({
       decoder: "mediabunny-webcodecs",
       mediaInput: "url-range",
       mediaSource: "embedded",
     });
+
+    const summary = (await getPanelSummaryMarkdown(panel)).toLowerCase();
+    expect(summary).toMatch(/purple|telescope|orange piano/u);
 
     for (const pathname of ["speech.mp3", "speech.mp4"]) {
       const directUrl = new URL(pathname, serverUrl).href;
@@ -202,7 +209,13 @@ test("transcribes embedded browser media through MediaBunny and local Whisper", 
           timeout: 8 * 60 * 1000,
         })
         .toBe(previousCount + 1);
-      expect((await readDiagnosticsNewestFirst())[0]).toMatchObject({
+      const directDiagnostic = (await readDiagnosticsNewestFirst())[0];
+      if (directDiagnostic?.event === "extract:browser-media:local-transcript-failed") {
+        throw new Error(
+          `Local browser media transcription failed: ${String(directDiagnostic.error)}`,
+        );
+      }
+      expect(directDiagnostic).toMatchObject({
         decoder: "mediabunny-webcodecs",
         mediaInput: "url-range",
         mediaSource: "direct",

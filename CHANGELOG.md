@@ -10,6 +10,7 @@
 - Network fetches: keep body-consumption deadlines active alongside caller cancellation and preserve caller abort reasons instead of misreporting them as timeouts.
 - URL fetch guard: block IPv4 documentation ranges while allowing public addresses elsewhere in 192.0.0.0/8.
 - YouTube metadata: harden view-count freshness, fallbacks, embedded transcript cache identity, and timeout enforcement while reading response bodies.
+- Chrome extension: update Transformers.js to 4.2 and resolve its bundled ONNX runtime assets through the installed dependency graph.
 
 ### Docs
 
