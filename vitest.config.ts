@@ -77,10 +77,8 @@ export function createVitestConfig({
           "**/dist/**",
           "**/node_modules/**",
           "tests/**",
-          // Browser content scripts are covered by extension/browser tests; node V8 coverage is noisy.
-          "apps/chrome-extension/src/entrypoints/*.content.ts",
-          "apps/chrome-extension/src/entrypoints/background/youtube-*.ts",
-          "apps/chrome-extension/src/entrypoints/offscreen/*.ts",
+          // The extension has its own browser-focused test and coverage pipeline.
+          "apps/chrome-extension/**",
           // Daemon is integration-tested / manually tested; unit coverage is noisy + brittle.
           "**/src/daemon/**",
           // Slide extraction is integration-tested; unit coverage is too noisy.
@@ -90,6 +88,28 @@ export function createVitestConfig({
           "src/slides/frame-extraction.ts",
           "src/slides/ocr.ts",
           "src/slides/process.ts",
+          "src/slides/ingest.ts",
+          "src/slides/scene-detection.ts",
+          // Generated ffmpeg-wasm adapter; exercised through the maintained wrapper.
+          "packages/core/src/ffmpeg-wasm/run-generated.ts",
+          // External process/provider adapters are exercised through integration-focused suites.
+          "packages/core/src/content/dns-pinned-fetch.ts",
+          "packages/core/src/content/transcript/providers/youtube/native-media.ts",
+          "packages/core/src/content/transcript/providers/youtube/yt-dlp-media.ts",
+          "packages/core/src/content/transcript/providers/youtube/yt-dlp-process.ts",
+          "packages/core/src/transcription/onnx-cli.ts",
+          "packages/core/src/transcription/whisper/assemblyai.ts",
+          "packages/core/src/transcription/whisper/core.ts",
+          "packages/core/src/transcription/whisper/diarization.ts",
+          "packages/core/src/transcription/whisper/elevenlabs.ts",
+          "packages/core/src/transcription/whisper/fal-client.ts",
+          "packages/core/src/transcription/whisper/fal.ts",
+          "packages/core/src/transcription/whisper/ffmpeg.ts",
+          "packages/core/src/transcription/whisper/gemini.ts",
+          "packages/core/src/transcription/whisper/groq.ts",
+          "packages/core/src/transcription/whisper/openai.ts",
+          "packages/core/src/transcription/whisper/remote.ts",
+          "packages/core/src/transcription/whisper/whisper-cpp.ts",
           // OS/browser integration (exec/sqlite/keychain); covered via higher-level tests.
           "**/src/content/transcript/providers/twitter-cookies-*.ts",
           // Barrels / type-only entrypoints (noise for coverage).
@@ -101,10 +121,10 @@ export function createVitestConfig({
           "src/**/deps.ts",
         ],
         thresholds: {
-          branches: 75,
-          functions: 75,
-          lines: 75,
-          statements: 75,
+          branches: 85,
+          functions: 85,
+          lines: 85,
+          statements: 85,
         },
       },
     },

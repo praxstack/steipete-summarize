@@ -44,8 +44,25 @@ describe("vitest config", () => {
   });
 
   it("excludes browser content scripts from node coverage", () => {
-    expect(createVitestConfig({ env: {} }).test?.coverage?.exclude).toContain(
-      "apps/chrome-extension/src/entrypoints/*.content.ts",
-    );
+    const exclude = createVitestConfig({ env: {} }).test?.coverage?.exclude;
+    expect(exclude).toContain("apps/chrome-extension/**");
+  });
+
+  it("excludes generated and external-process adapters from unit coverage", () => {
+    const exclude = createVitestConfig({ env: {} }).test?.coverage?.exclude;
+    expect(exclude).toContain("packages/core/src/ffmpeg-wasm/run-generated.ts");
+    expect(exclude).toContain("packages/core/src/content/dns-pinned-fetch.ts");
+    expect(exclude).toContain("packages/core/src/transcription/onnx-cli.ts");
+    expect(exclude).toContain("packages/core/src/transcription/whisper/gemini.ts");
+    expect(exclude).toContain("src/slides/scene-detection.ts");
+  });
+
+  it("enforces 85 percent global coverage", () => {
+    expect(createVitestConfig({ env: {} }).test?.coverage?.thresholds).toEqual({
+      branches: 85,
+      functions: 85,
+      lines: 85,
+      statements: 85,
+    });
   });
 });
