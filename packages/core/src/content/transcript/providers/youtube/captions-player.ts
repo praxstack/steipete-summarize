@@ -215,7 +215,7 @@ export async function fetchYoutubePlayerPayload(
       REQUEST_HEADERS["User-Agent"] ??
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
-    const response = await fetchWithTimeout(
+    return await fetchWithTimeout(
       fetchImpl,
       `https://www.youtube.com/youtubei/v1/player?key=${apiKey}`,
       {
@@ -229,11 +229,12 @@ export async function fetchYoutubePlayerPayload(
         body: JSON.stringify(requestBody),
       },
       timeoutMs,
+      async (response) => {
+        if (!response.ok) return null;
+        const parsed: unknown = await response.json();
+        return isObjectLike(parsed) ? parsed : null;
+      },
     );
-
-    if (!response.ok) return null;
-    const parsed: unknown = await response.json();
-    return isObjectLike(parsed) ? parsed : null;
   } catch {
     return null;
   }

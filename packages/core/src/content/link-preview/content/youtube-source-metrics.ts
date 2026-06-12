@@ -171,7 +171,7 @@ export async function fetchYoutubeSourceMetrics({
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
   let html = "";
   try {
-    const response = await fetchWithTimeout(
+    html = await fetchWithTimeout(
       fetchImpl,
       watchUrl,
       {
@@ -182,8 +182,8 @@ export async function fetchYoutubeSourceMetrics({
         },
       },
       timeoutMs,
+      async (response) => (response.ok ? await response.text() : ""),
     );
-    if (response.ok) html = await response.text();
   } catch {
     // yt-dlp remains available as an independent metadata fallback.
   }
