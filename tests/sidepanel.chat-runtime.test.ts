@@ -143,7 +143,7 @@ function createHarness(options: { chatEnabled?: boolean } = {}) {
     automationNoticeTitleEl,
     getActiveTabId: () => store.state.navigation.activeTabId,
     getActiveTabUrl: () => store.state.navigation.activeTabUrl,
-    getNavigationRuntime: () => navigationRuntime,
+    navigationRuntime,
     send,
     setStatus,
     clearErrors,

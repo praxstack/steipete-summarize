@@ -50,7 +50,6 @@ type UiStateRuntimeOpts = {
   clearInlineError: () => void;
   requestAgentAbort: (reason: string) => void;
   clearChatHistoryForActiveTab: () => void | Promise<void>;
-  resetChatState: () => void;
   migrateChatHistory: (
     fromTabId: number | null,
     toTabId: number | null,
@@ -210,7 +209,6 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
       }
       if (navigation.shouldClearChat) {
         void opts.clearChatHistoryForActiveTab();
-        opts.resetChatState();
       } else if (navigation.shouldMigrateChat) {
         void opts.migrateChatHistory(previousTabId, nextTabId, nextTabUrl);
       }
@@ -236,7 +234,6 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
         opts.navigationRuntime.notePreserveChatForUrl(nextTabUrl);
       } else if (navigation.shouldClearChat) {
         void opts.clearChatHistoryForActiveTab();
-        opts.resetChatState();
       }
       opts.abortSummaryStream();
       if (!opts.maybeStartPendingSummaryRunForUrl(nextTabUrl)) {

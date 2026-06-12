@@ -1,7 +1,5 @@
 import { panelUrlsMatch } from "./session-policy";
 
-export type PanelSource = { url: string; title: string | null };
-
 export type NavigationRuntime = {
   markAgentNavigationIntent: (url: string | null | undefined) => void;
   markAgentNavigationResult: (details: unknown) => void;
@@ -9,39 +7,18 @@ export type NavigationRuntime = {
   isRecentAgentNavigation: (tabId: number | null, url: string | null) => boolean;
   notePreserveChatForUrl: (url: string | null) => void;
   shouldPreserveChatForRun: (url: string) => boolean;
-  syncWithActiveTab: () => Promise<void>;
 };
 
 type NavigationRuntimeOptions = {
   ttlMs?: number;
-  getCurrentSource: () => PanelSource | null;
-  setCurrentSource: (source: PanelSource | null) => void;
-  resetForNavigation: (preserveChat: boolean) => void;
-  setBaseTitle: (title: string) => void;
 };
 
 type AgentNavigation = { url: string; tabId: number | null; at: number };
 
-export function createNavigationRuntime(options: NavigationRuntimeOptions): NavigationRuntime {
-  const {
-    ttlMs = 20_000,
-    getCurrentSource,
-    setCurrentSource,
-    resetForNavigation,
-    setBaseTitle,
-  } = options;
+export function createNavigationRuntime(options: NavigationRuntimeOptions = {}): NavigationRuntime {
+  const { ttlMs = 20_000 } = options;
   let lastAgentNavigation: AgentNavigation | null = null;
   let pendingPreserveChatForUrl: { url: string; at: number } | null = null;
-
-  const canSyncTabUrl = (url: string | null | undefined): url is string => {
-    if (!url) return false;
-    if (url.startsWith("chrome://")) return false;
-    if (url.startsWith("chrome-extension://")) return false;
-    if (url.startsWith("moz-extension://")) return false;
-    if (url.startsWith("edge://")) return false;
-    if (url.startsWith("about:")) return false;
-    return true;
-  };
 
   const isRecentAgentNavigation = (tabId: number | null, url: string | null) => {
     if (!lastAgentNavigation) return false;
@@ -72,29 +49,6 @@ export function createNavigationRuntime(options: NavigationRuntimeOptions): Navi
     return isRecentAgentNavigation(null, url);
   };
 
-  const syncWithActiveTab = async () => {
-    const currentSource = getCurrentSource();
-    if (!currentSource) return;
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.url || !canSyncTabUrl(tab.url)) return;
-      if (!panelUrlsMatch(tab.url, currentSource.url)) {
-        const preserveChat = isRecentAgentNavigation(tab.id ?? null, tab.url);
-        if (preserveChat) notePreserveChatForUrl(tab.url);
-        setCurrentSource(null);
-        resetForNavigation(preserveChat);
-        setBaseTitle(tab.title || tab.url || "Summarize");
-        return;
-      }
-      if (tab.title && tab.title !== currentSource.title) {
-        setCurrentSource({ ...currentSource, title: tab.title });
-        setBaseTitle(tab.title);
-      }
-    } catch {
-      // ignore
-    }
-  };
-
   return {
     markAgentNavigationIntent(url) {
       const trimmed = typeof url === "string" ? url.trim() : "";
@@ -119,6 +73,5 @@ export function createNavigationRuntime(options: NavigationRuntimeOptions): Navi
     isRecentAgentNavigation,
     notePreserveChatForUrl,
     shouldPreserveChatForRun,
-    syncWithActiveTab,
   };
 }

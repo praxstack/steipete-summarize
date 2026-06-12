@@ -52,7 +52,6 @@ function createHarness(
     slidesStart: vi.fn(),
     slidesStop: vi.fn(),
     slidesUpdateTextState: vi.fn(),
-    summarySetPreserveChat: vi.fn(),
     summaryStart: vi.fn(async () => {}),
     viewReset: vi.fn(),
   };
@@ -65,7 +64,6 @@ function createHarness(
     cancelAutoSummarize: calls.cancelAutoSummarize,
     summaryStream: {
       isStreaming: () => options.streaming ?? false,
-      setPreserveChatOnNextReset: calls.summarySetPreserveChat,
       start: calls.summaryStart,
     },
     slides: {
@@ -146,7 +144,6 @@ describe("summary run runtime", () => {
     expect(harness.calls.slidesStop).not.toHaveBeenCalled();
     expect(harness.calls.chatClearHistory).not.toHaveBeenCalled();
     expect(harness.calls.chatReset).not.toHaveBeenCalled();
-    expect(harness.calls.summarySetPreserveChat).toHaveBeenCalledWith(true);
     expect(harness.calls.slidesStart).toHaveBeenCalledWith(run);
     expect(harness.calls.slidesSeedPlannedRun).toHaveBeenCalledWith(run);
     expect(harness.panelState.slidesRunId).toBe(run.id);
@@ -207,10 +204,11 @@ describe("summary run runtime", () => {
     harness.runtime.applySnapshot({ run, markdown: "Cached summary" });
 
     expect(harness.calls.viewReset).toHaveBeenCalledWith({
-      preserveChat: false,
       clearRunId: false,
       stopSlides: false,
     });
+    expect(harness.calls.chatClearHistory).not.toHaveBeenCalled();
+    expect(harness.calls.chatReset).toHaveBeenCalledOnce();
     expect(harness.panelState.slides).toBe(slides);
     expect(harness.panelState.slidesRunId).toBe("youtube-1");
     expect(harness.calls.slidesSetTranscriptTimedText).toHaveBeenCalledWith("00:00 Intro");
@@ -227,7 +225,6 @@ describe("summary run runtime", () => {
     harness.runtime.applySnapshot({ run, markdown: "Cached summary" });
 
     expect(harness.calls.viewReset).toHaveBeenCalledWith({
-      preserveChat: false,
       clearRunId: false,
       stopSlides: false,
     });
@@ -249,7 +246,6 @@ describe("summary run runtime", () => {
     harness.runtime.applySnapshot({ run, markdown: "Cached summary" });
 
     expect(harness.calls.viewReset).toHaveBeenCalledWith({
-      preserveChat: false,
       clearRunId: false,
       stopSlides: true,
     });

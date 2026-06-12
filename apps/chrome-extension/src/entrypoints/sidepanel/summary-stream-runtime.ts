@@ -50,11 +50,7 @@ export function createSummaryStreamRuntime({
   refreshSummaryMetrics: (summary: string) => void;
   rememberUrl: (url: string) => void;
   renderMarkdown: (markdown: string) => void;
-  resetSummaryView: (opts: {
-    preserveChat?: boolean;
-    clearRunId?: boolean;
-    stopSlides?: boolean;
-  }) => void;
+  resetSummaryView: (opts: { clearRunId?: boolean; stopSlides?: boolean }) => void;
   schedulePanelCacheSync: () => void;
   seedPlannedSlidesForPendingRun: () => void;
   setSlidesBusy: (value: boolean) => void;
@@ -70,19 +66,12 @@ export function createSummaryStreamRuntime({
     }
   };
   let lastStreamError: string | null = null;
-  let preserveChatOnNextReset = false;
 
   return {
-    preserveChatOnNextReset: () => preserveChatOnNextReset,
-    setPreserveChatOnNextReset: (value: boolean) => {
-      preserveChatOnNextReset = value;
-    },
     streamController: createStreamController({
       getToken,
       onReset: () => {
-        const preserveChat = preserveChatOnNextReset;
-        preserveChatOnNextReset = false;
-        resetSummaryView({ preserveChat, clearRunId: false, stopSlides: false });
+        resetSummaryView({ clearRunId: false, stopSlides: false });
         const fallbackModel = getFallbackModel();
         dispatch({
           type: "meta",

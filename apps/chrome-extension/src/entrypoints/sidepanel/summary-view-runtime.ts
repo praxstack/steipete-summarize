@@ -43,7 +43,6 @@ type SummaryViewRuntimeOpts = {
   slidesHydrator: SlidesHydratorLike;
   stopSlidesStream: () => void;
   refreshSummarizeControl: () => void;
-  resetChatState: () => void;
   setSlidesTranscriptTimedText: (value: string | null) => void;
   updateSlidesTextState: () => void;
   requestSlidesContext: () => void | Promise<void>;
@@ -73,11 +72,9 @@ export function createSummaryViewRuntime(opts: SummaryViewRuntimeOpts) {
   };
 
   function resetSummaryView({
-    preserveChat = false,
     clearRunId = true,
     stopSlides = true,
   }: {
-    preserveChat?: boolean;
     clearRunId?: boolean;
     stopSlides?: boolean;
   } = {}) {
@@ -107,14 +104,10 @@ export function createSummaryViewRuntime(opts: SummaryViewRuntimeOpts) {
       opts.stopSlidesStream();
     }
     opts.refreshSummarizeControl();
-    if (!preserveChat) {
-      opts.resetChatState();
-    }
   }
 
-  function applyPanelCache(payload: PanelCachePayload, applyOpts?: { preserveChat?: boolean }) {
-    const preserveChat = applyOpts?.preserveChat ?? false;
-    resetSummaryView({ preserveChat });
+  function applyPanelCache(payload: PanelCachePayload) {
+    resetSummaryView();
     const slidesRunId =
       payload.slidesRunId ??
       (opts.panelState.slidesSession.slidesParallel ? null : (payload.runId ?? null));

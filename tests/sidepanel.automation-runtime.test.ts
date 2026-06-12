@@ -70,7 +70,7 @@ function createHarness(options: { activeTabId?: number | null } = {}) {
     chatController,
     getActiveTabId: () => options.activeTabId ?? null,
     getChatSession: () => chatSession,
-    getNavigationRuntime: () => navigationRuntime,
+    navigationRuntime,
     scrollToBottom: vi.fn(),
     wrapMessage: (message: Message) => ({ ...message, id: "wrapped" }),
     eventTarget: {

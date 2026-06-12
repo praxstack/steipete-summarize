@@ -55,7 +55,6 @@ describe("summary view runtime", () => {
       slidesHydrator: { syncFromCache },
       stopSlidesStream: vi.fn(),
       refreshSummarizeControl: vi.fn(),
-      resetChatState: vi.fn(),
       setSlidesTranscriptTimedText: vi.fn(),
       getSlidesSummaryState: vi.fn(() => ({
         runId: null,
@@ -119,7 +118,6 @@ describe("summary view runtime", () => {
       slidesHydrator: { syncFromCache: vi.fn() },
       stopSlidesStream: vi.fn(),
       refreshSummarizeControl: vi.fn(),
-      resetChatState: vi.fn(),
       setSlidesTranscriptTimedText: vi.fn(),
       getSlidesSummaryState: vi.fn(() => ({
         runId: null,
@@ -183,7 +181,6 @@ describe("summary view runtime", () => {
       slidesHydrator: { syncFromCache: vi.fn() },
       stopSlidesStream: vi.fn(),
       refreshSummarizeControl: vi.fn(),
-      resetChatState: vi.fn(),
       setSlidesTranscriptTimedText: vi.fn(),
       getSlidesSummaryState: vi.fn(() => ({
         runId: null,
@@ -239,7 +236,6 @@ describe("summary view runtime", () => {
       slidesHydrator: { syncFromCache: vi.fn() },
       stopSlidesStream: vi.fn(),
       refreshSummarizeControl: vi.fn(),
-      resetChatState: vi.fn(),
       setSlidesTranscriptTimedText: vi.fn(),
       getSlidesSummaryState: vi.fn(() => ({
         runId: null,

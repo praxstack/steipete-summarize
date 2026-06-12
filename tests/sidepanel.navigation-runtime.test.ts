@@ -1,75 +1,78 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  syncNavigationWithActiveTab,
+  type PanelSource,
+} from "../apps/chrome-extension/src/entrypoints/sidepanel/active-tab-sync.js";
 import { createNavigationRuntime } from "../apps/chrome-extension/src/entrypoints/sidepanel/navigation-runtime.js";
+
+function createSyncHarness({
+  currentSource = { url: "https://example.com/a", title: "A" },
+  tab = null,
+}: {
+  currentSource?: PanelSource | null;
+  tab?: { id?: number; url?: string; title?: string } | null;
+} = {}) {
+  const navigationRuntime = createNavigationRuntime();
+  let source = currentSource;
+  const resetForNavigation = vi.fn();
+  const setBaseTitle = vi.fn();
+  const sync = () =>
+    syncNavigationWithActiveTab({
+      navigationRuntime,
+      getCurrentSource: () => source,
+      setCurrentSource: (next) => {
+        source = next;
+      },
+      resetForNavigation,
+      setBaseTitle,
+      queryActiveTab: vi.fn(async () => tab),
+    });
+  return {
+    getCurrentSource: () => source,
+    navigationRuntime,
+    resetForNavigation,
+    setBaseTitle,
+    sync,
+  };
+}
 
 describe("sidepanel navigation runtime", () => {
   beforeEach(() => {
     vi.useRealTimers();
-    vi.stubGlobal("chrome", {
-      tabs: {
-        query: vi.fn(async () => []),
-      },
-    });
   });
 
   it("preserves chat when the active tab matches a recent agent navigation", async () => {
-    const resetForNavigation = vi.fn();
-    const setBaseTitle = vi.fn();
-    let currentSource = { url: "https://example.com/a", title: "A" };
-
-    const runtime = createNavigationRuntime({
-      getCurrentSource: () => currentSource,
-      setCurrentSource: (next) => {
-        currentSource = next;
-      },
-      resetForNavigation,
-      setBaseTitle,
+    const harness = createSyncHarness({
+      tab: { id: 2, url: "https://example.com/b", title: "B" },
     });
+    harness.navigationRuntime.markAgentNavigationIntent("https://example.com/b");
 
-    runtime.markAgentNavigationIntent("https://example.com/b");
-    vi.mocked(chrome.tabs.query).mockResolvedValueOnce([
-      { id: 2, url: "https://example.com/b", title: "B" },
-    ]);
+    await harness.sync();
 
-    await runtime.syncWithActiveTab();
-
-    expect(currentSource).toBeNull();
-    expect(resetForNavigation).toHaveBeenCalledWith(true);
-    expect(setBaseTitle).toHaveBeenCalledWith("B");
-    expect(runtime.shouldPreserveChatForRun("https://example.com/b")).toBe(true);
+    expect(harness.getCurrentSource()).toBeNull();
+    expect(harness.resetForNavigation).toHaveBeenCalledWith(true);
+    expect(harness.setBaseTitle).toHaveBeenCalledWith("B");
+    expect(harness.navigationRuntime.shouldPreserveChatForRun("https://example.com/b")).toBe(true);
   });
 
   it("updates the current title when the active tab stays on the same page", async () => {
-    const resetForNavigation = vi.fn();
-    const setBaseTitle = vi.fn();
-    let currentSource = { url: "https://example.com/a", title: "Old" };
-
-    const runtime = createNavigationRuntime({
-      getCurrentSource: () => currentSource,
-      setCurrentSource: (next) => {
-        currentSource = next;
-      },
-      resetForNavigation,
-      setBaseTitle,
+    const harness = createSyncHarness({
+      currentSource: { url: "https://example.com/a", title: "Old" },
+      tab: { id: 1, url: "https://example.com/a#hash", title: "New" },
     });
 
-    vi.mocked(chrome.tabs.query).mockResolvedValueOnce([
-      { id: 1, url: "https://example.com/a#hash", title: "New" },
-    ]);
+    await harness.sync();
 
-    await runtime.syncWithActiveTab();
-
-    expect(currentSource).toEqual({ url: "https://example.com/a", title: "New" });
-    expect(resetForNavigation).not.toHaveBeenCalled();
-    expect(setBaseTitle).toHaveBeenCalledWith("New");
+    expect(harness.getCurrentSource()).toEqual({
+      url: "https://example.com/a",
+      title: "New",
+    });
+    expect(harness.resetForNavigation).not.toHaveBeenCalled();
+    expect(harness.setBaseTitle).toHaveBeenCalledWith("New");
   });
 
   it("ignores blank navigation intents and malformed results", () => {
-    const runtime = createNavigationRuntime({
-      getCurrentSource: () => null,
-      setCurrentSource: vi.fn(),
-      resetForNavigation: vi.fn(),
-      setBaseTitle: vi.fn(),
-    });
+    const runtime = createNavigationRuntime();
 
     runtime.markAgentNavigationIntent("   ");
     runtime.markAgentNavigationResult(null);
@@ -80,13 +83,7 @@ describe("sidepanel navigation runtime", () => {
 
   it("preserves chat for matching pending URLs only within ttl", () => {
     vi.useFakeTimers();
-    const runtime = createNavigationRuntime({
-      ttlMs: 100,
-      getCurrentSource: () => null,
-      setCurrentSource: vi.fn(),
-      resetForNavigation: vi.fn(),
-      setBaseTitle: vi.fn(),
-    });
+    const runtime = createNavigationRuntime({ ttlMs: 100 });
 
     runtime.notePreserveChatForUrl("https://example.com/next");
     expect(runtime.shouldPreserveChatForRun("https://example.com/next")).toBe(true);
@@ -99,13 +96,7 @@ describe("sidepanel navigation runtime", () => {
 
   it("treats matching tab ids as recent agent navigation", () => {
     vi.useFakeTimers();
-    const runtime = createNavigationRuntime({
-      ttlMs: 100,
-      getCurrentSource: () => null,
-      setCurrentSource: vi.fn(),
-      resetForNavigation: vi.fn(),
-      setBaseTitle: vi.fn(),
-    });
+    const runtime = createNavigationRuntime({ ttlMs: 100 });
 
     runtime.markAgentNavigationResult({ finalUrl: "https://example.com/final", tabId: 7 });
     expect(runtime.isRecentAgentNavigation(7, null)).toBe(true);
@@ -114,70 +105,51 @@ describe("sidepanel navigation runtime", () => {
   });
 
   it("ignores unsupported active-tab schemes and missing current source", async () => {
-    const resetForNavigation = vi.fn();
-    const setBaseTitle = vi.fn();
-    const runtime = createNavigationRuntime({
-      getCurrentSource: () => null,
-      setCurrentSource: vi.fn(),
-      resetForNavigation,
-      setBaseTitle,
+    const missingSource = createSyncHarness({
+      currentSource: null,
+      tab: { url: "https://example.com/a", title: "A" },
+    });
+    const unsupported = createSyncHarness({
+      tab: { url: "chrome://extensions", title: "Extensions" },
     });
 
-    await runtime.syncWithActiveTab();
-    vi.mocked(chrome.tabs.query).mockResolvedValueOnce([
-      { url: "chrome://extensions", title: "X" },
-    ]);
+    await missingSource.sync();
+    await unsupported.sync();
 
-    const runtimeWithSource = createNavigationRuntime({
-      getCurrentSource: () => ({ url: "https://example.com/a", title: "A" }),
-      setCurrentSource: vi.fn(),
-      resetForNavigation,
-      setBaseTitle,
-    });
-    await runtimeWithSource.syncWithActiveTab();
-
-    expect(resetForNavigation).not.toHaveBeenCalled();
-    expect(setBaseTitle).not.toHaveBeenCalled();
+    expect(missingSource.resetForNavigation).not.toHaveBeenCalled();
+    expect(missingSource.setBaseTitle).not.toHaveBeenCalled();
+    expect(unsupported.resetForNavigation).not.toHaveBeenCalled();
+    expect(unsupported.setBaseTitle).not.toHaveBeenCalled();
   });
 
   it("falls back to non-preserved reset when there is no recent navigation", async () => {
-    const resetForNavigation = vi.fn();
-    const setBaseTitle = vi.fn();
-    let currentSource = { url: "https://example.com/a", title: "A" };
-
-    const runtime = createNavigationRuntime({
-      getCurrentSource: () => currentSource,
-      setCurrentSource: (next) => {
-        currentSource = next;
-      },
-      resetForNavigation,
-      setBaseTitle,
+    const harness = createSyncHarness({
+      tab: { id: 2, url: "https://example.com/b", title: "" },
     });
 
-    vi.mocked(chrome.tabs.query).mockResolvedValueOnce([
-      { id: 2, url: "https://example.com/b", title: "" },
-    ]);
+    await harness.sync();
 
-    await runtime.syncWithActiveTab();
-
-    expect(currentSource).toBeNull();
-    expect(resetForNavigation).toHaveBeenCalledWith(false);
-    expect(setBaseTitle).toHaveBeenCalledWith("https://example.com/b");
+    expect(harness.getCurrentSource()).toBeNull();
+    expect(harness.resetForNavigation).toHaveBeenCalledWith(false);
+    expect(harness.setBaseTitle).toHaveBeenCalledWith("https://example.com/b");
   });
 
   it("swallows tab-query failures", async () => {
+    const navigationRuntime = createNavigationRuntime();
     const resetForNavigation = vi.fn();
-    const setBaseTitle = vi.fn();
 
-    const runtime = createNavigationRuntime({
-      getCurrentSource: () => ({ url: "https://example.com/a", title: "A" }),
-      setCurrentSource: vi.fn(),
-      resetForNavigation,
-      setBaseTitle,
-    });
-
-    vi.mocked(chrome.tabs.query).mockRejectedValueOnce(new Error("boom"));
-    await expect(runtime.syncWithActiveTab()).resolves.toBeUndefined();
+    await expect(
+      syncNavigationWithActiveTab({
+        navigationRuntime,
+        getCurrentSource: () => ({ url: "https://example.com/a", title: "A" }),
+        setCurrentSource: vi.fn(),
+        resetForNavigation,
+        setBaseTitle: vi.fn(),
+        queryActiveTab: vi.fn(async () => {
+          throw new Error("boom");
+        }),
+      }),
+    ).resolves.toBeUndefined();
     expect(resetForNavigation).not.toHaveBeenCalled();
   });
 });

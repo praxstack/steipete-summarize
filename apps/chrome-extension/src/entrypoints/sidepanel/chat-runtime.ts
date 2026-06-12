@@ -45,7 +45,7 @@ export function createSidepanelChatRuntime({
   automationNoticeTitleEl,
   getActiveTabId,
   getActiveTabUrl,
-  getNavigationRuntime,
+  navigationRuntime,
   send,
   setStatus,
   clearErrors,
@@ -75,7 +75,7 @@ export function createSidepanelChatRuntime({
   automationNoticeTitleEl: HTMLElement;
   getActiveTabId: () => number | null;
   getActiveTabUrl: () => string | null;
-  getNavigationRuntime: () => NavigationRuntime;
+  navigationRuntime: NavigationRuntime;
   send: (message: PanelToBg) => Promise<void>;
   setStatus: (value: string) => void;
   clearErrors: () => void;
@@ -160,7 +160,7 @@ export function createSidepanelChatRuntime({
     chatController,
     getActiveTabId,
     getChatSession: () => chatSession,
-    getNavigationRuntime,
+    navigationRuntime,
     scrollToBottom: chatUiRuntime.scrollToBottom,
     wrapMessage,
   });

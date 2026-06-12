@@ -161,18 +161,15 @@ describe("sidepanel summary stream runtime", () => {
     expect(calls.schedulePanelCacheSync).toHaveBeenCalledTimes(2);
   });
 
-  it("tracks preserve-chat on reset and clears it after use", () => {
-    const { calls, panelState, runtime } = buildRuntime();
+  it("resets only summary state when a stream starts", () => {
+    const { calls, panelState } = buildRuntime();
 
-    runtime.setPreserveChatOnNextReset(true);
     capturedOptions?.onReset?.();
 
     expect(calls.resetSummaryView).toHaveBeenCalledWith({
-      preserveChat: true,
       clearRunId: false,
       stopSlides: false,
     });
-    expect(runtime.preserveChatOnNextReset()).toBe(false);
     expect(panelState.lastMeta).toEqual({
       inputSummary: null,
       model: "openai/gpt-5.4",

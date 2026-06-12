@@ -35,7 +35,7 @@ export function createAutomationRuntime({
   chatController,
   getActiveTabId,
   getChatSession,
-  getNavigationRuntime,
+  navigationRuntime,
   scrollToBottom,
   wrapMessage,
   eventTarget = window,
@@ -58,7 +58,7 @@ export function createAutomationRuntime({
   >;
   getActiveTabId: () => number | null;
   getChatSession: () => AutomationChatSession;
-  getNavigationRuntime: () => {
+  navigationRuntime: {
     markAgentNavigationIntent: (url: string | null | undefined) => void;
     markAgentNavigationResult: (details: unknown) => void;
   };
@@ -181,7 +181,6 @@ export function createAutomationRuntime({
     );
 
   const runAgentLoop = async () => {
-    const navigationRuntime = getNavigationRuntime();
     await runChatAgentLoop({
       automationEnabled: panelState.panelSession.automationEnabled,
       chatController,

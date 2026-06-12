@@ -5,7 +5,6 @@ import type { PanelPhase, PanelState, RunStart } from "./types";
 
 type SummaryStreamPort = {
   isStreaming: () => boolean;
-  setPreserveChatOnNextReset: (value: boolean) => void;
   start: (run: RunStart) => Promise<void>;
 };
 
@@ -29,7 +28,7 @@ type ChatRunPort = {
 type SummaryViewPort = {
   queueEmptyRender: () => void;
   renderMarkdown: (markdown: string) => void;
-  reset: (options: { preserveChat?: boolean; clearRunId?: boolean; stopSlides?: boolean }) => void;
+  reset: (options: { clearRunId?: boolean; stopSlides?: boolean }) => void;
   setHeaderSubtitle: (value: string) => void;
   setHeaderTitle: (value: string) => void;
   setMetricsMode: (mode: "summary") => void;
@@ -76,9 +75,7 @@ export function createSummaryRunRuntime({
     if (panelState.chat.streaming) chat.finishStreamingMessage();
 
     const preserveChat = chat.shouldPreserveForRun(run.url);
-    if (preserveChat) {
-      summaryStream.setPreserveChatOnNextReset(true);
-    } else {
+    if (!preserveChat) {
       void chat.clearHistory();
       chat.reset();
     }
@@ -136,11 +133,8 @@ export function createSummaryRunRuntime({
       panelUrlsMatch(panelState.slides.sourceUrl, payload.run.url)
         ? panelState.slides
         : null;
-    view.reset({
-      preserveChat: false,
-      clearRunId: false,
-      stopSlides: !preserveActiveSlideRun,
-    });
+    chat.reset();
+    view.reset({ clearRunId: false, stopSlides: !preserveActiveSlideRun });
     const slidesRunId =
       preservedSlides?.sourceId ??
       (preserveActiveSlideRun ? (activeSlidesRun?.runId ?? null) : null);

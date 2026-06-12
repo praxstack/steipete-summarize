@@ -9,6 +9,7 @@ import {
 } from "../../lib/settings";
 import { splitSummaryFromSlides } from "../../lib/slides-text";
 import { generateToken } from "../../lib/token";
+import { syncNavigationWithActiveTab } from "./active-tab-sync";
 import { createAppearanceControls } from "./appearance-controls";
 import { createAutoSummarizeRuntime } from "./auto-summarize-runtime";
 import { createSidepanelBgMessageRuntime } from "./bg-message-runtime";
@@ -27,6 +28,7 @@ import {
 } from "./panel-cache";
 import { createPanelMessagingRuntime } from "./panel-messaging";
 import { createPanelStateStore } from "./panel-state-store";
+import { createPanelViewRuntime } from "./panel-view-runtime";
 import { createPanelPhaseRuntime } from "./phase-runtime";
 import { createPlannedSlidesRuntime } from "./planned-slides-runtime";
 import {
@@ -420,20 +422,7 @@ const phaseRuntime = createPanelPhaseRuntime({
 });
 const { setPhase } = phaseRuntime;
 
-const navigationRuntime = createNavigationRuntime({
-  getCurrentSource: () => panelState.currentSource,
-  setCurrentSource: (source) => {
-    panelStateStore.dispatch({ type: "source", source });
-  },
-  resetForNavigation: (preserveChat) => {
-    setPhase("idle");
-    resetSummaryView({ preserveChat });
-    headerController.setBaseSubtitle("");
-  },
-  setBaseTitle: (title) => {
-    headerController.setBaseTitle(title);
-  },
-});
+const navigationRuntime = createNavigationRuntime();
 
 const chatRuntime = createSidepanelChatRuntime({
   panelState,
@@ -455,7 +444,7 @@ const chatRuntime = createSidepanelChatRuntime({
   automationNoticeTitleEl,
   getActiveTabId,
   getActiveTabUrl,
-  getNavigationRuntime: () => navigationRuntime,
+  navigationRuntime,
   send,
   setStatus: (value) => {
     headerController.setStatus(value);
@@ -483,22 +472,6 @@ const chatRuntime = createSidepanelChatRuntime({
   },
 });
 
-const syncWithActiveTab = () => navigationRuntime.syncWithActiveTab();
-
-async function clearCurrentView() {
-  panelStateStore.dispatch({ type: "retained-slide-summary", value: null });
-  if (panelState.chat.streaming) {
-    chatRuntime.requestAbort("Cleared");
-  }
-  streamController.abort();
-  stopSlidesStream();
-  resetSummaryView({ preserveChat: false });
-  await chatRuntime.clearHistoryForActiveTab();
-  panelCacheController.scheduleSync();
-  headerController.setStatus("");
-  setPhase("idle");
-}
-
 const summaryViewRuntime = createSummaryViewRuntime({
   panelState,
   dispatchPanelState: panelStateStore.dispatch,
@@ -513,7 +486,6 @@ const summaryViewRuntime = createSummaryViewRuntime({
   slidesHydrator: activeSlidesHydrator,
   stopSlidesStream,
   refreshSummarizeControl,
-  resetChatState: chatRuntime.reset,
   setSlidesTranscriptTimedText,
   updateSlidesTextState,
   requestSlidesContext,
@@ -526,7 +498,43 @@ const summaryViewRuntime = createSummaryViewRuntime({
   queueSlidesRender,
   setPhase,
 });
-const { applyPanelCache, resetSummaryView } = summaryViewRuntime;
+const { resetSummaryView } = summaryViewRuntime;
+const panelViewRuntime = createPanelViewRuntime({
+  summaryView: summaryViewRuntime,
+  resetChatState: chatRuntime.reset,
+});
+const { applyPanelCache, resetPanelView } = panelViewRuntime;
+
+const syncWithActiveTab = () =>
+  syncNavigationWithActiveTab({
+    navigationRuntime,
+    getCurrentSource: () => panelState.currentSource,
+    setCurrentSource: (source) => {
+      panelStateStore.dispatch({ type: "source", source });
+    },
+    resetForNavigation: (preserveChat) => {
+      setPhase("idle");
+      resetPanelView({ preserveChat });
+      headerController.setBaseSubtitle("");
+    },
+    setBaseTitle: (title) => {
+      headerController.setBaseTitle(title);
+    },
+  });
+
+async function clearCurrentView() {
+  panelStateStore.dispatch({ type: "retained-slide-summary", value: null });
+  if (panelState.chat.streaming) {
+    chatRuntime.requestAbort("Cleared");
+  }
+  streamController.abort();
+  stopSlidesStream();
+  resetPanelView();
+  await chatRuntime.clearHistoryForActiveTab();
+  panelCacheController.scheduleSync();
+  headerController.setStatus("");
+  setPhase("idle");
+}
 
 function renderEmptySummaryState() {
   slidesViewRuntime.renderEmptySummaryState();
@@ -774,7 +782,6 @@ const summaryRunRuntime = createSummaryRunRuntime({
   cancelAutoSummarize: autoSummarizeRuntime.cancel,
   summaryStream: {
     isStreaming: streamController.isStreaming,
-    setPreserveChatOnNextReset: summaryStreamRuntime.setPreserveChatOnNextReset,
     start: streamController.start,
   },
   slides: {
@@ -816,7 +823,6 @@ const uiStateRuntime = createUiStateRuntime({
   },
   requestAgentAbort: chatRuntime.requestAbort,
   clearChatHistoryForActiveTab: chatRuntime.clearHistoryForActiveTab,
-  resetChatState: chatRuntime.reset,
   migrateChatHistory: chatRuntime.migrateHistory,
   maybeStartPendingSummaryRunForUrl: summaryRunRuntime.maybeStartPendingForUrl,
   maybeStartPendingSlidesForUrl,
@@ -825,7 +831,7 @@ const uiStateRuntime = createUiStateRuntime({
   },
   resolveActiveSlidesRunId,
   applyPanelCache,
-  resetSummaryView,
+  resetSummaryView: resetPanelView,
   abortSummaryStream: () => {
     streamController.abort();
   },
