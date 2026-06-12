@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { createRunFlowContexts } from "../application/flow-contexts.js";
 import {
   createExecutableRunModel,
   createRunModelRuntime,
@@ -15,7 +16,6 @@ import {
 } from "../tty/theme.js";
 import { createCacheStateFromConfig } from "./cache-state.js";
 import { parseCliProviderArg } from "./env.js";
-import { createRunFlowContexts, createRunnerAssetInputContext } from "./flow-contexts.js";
 import { isPdfExtension, isTranscribableExtension } from "./flows/asset/input.js";
 import { summarizeMediaFile as summarizeMediaFileImpl } from "./flows/asset/media.js";
 import { writeVerbose } from "./logging.js";
@@ -26,6 +26,7 @@ import { resolveRunContextState } from "./run-context.js";
 import { resolveRunInput } from "./run-input.js";
 import { buildPromptLengthInstruction, resolveSummaryLength } from "./run-settings.js";
 import { resolveStreamSettings } from "./run-stream.js";
+import { createRunnerAssetInputContext } from "./runner-asset-context.js";
 import { executeRunnerInput } from "./runner-execution.js";
 import { resolveRunnerFlags } from "./runner-flags.js";
 import { resolveRunnerSlidesSettings } from "./runner-slides.js";

@@ -1,9 +1,10 @@
 import { Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
+import { createRunFlowContexts } from "../src/application/flow-contexts.js";
 import type { CacheState } from "../src/cache.js";
-import { createRunFlowContexts, createRunnerAssetInputContext } from "../src/run/flow-contexts.js";
 import type { AssetSummaryContext } from "../src/run/flows/asset/types.js";
 import type { UrlFlowContext } from "../src/run/flows/url/types.js";
+import { createRunnerAssetInputContext } from "../src/run/runner-asset-context.js";
 
 const createWritable = () =>
   new Writable({

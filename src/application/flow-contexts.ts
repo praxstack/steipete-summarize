@@ -1,24 +1,17 @@
 import type { CacheState } from "../cache.js";
 import type { MediaCache } from "../content/index.js";
-import type { AssetInputContext } from "./flows/asset/input.js";
 import {
   createAssetSummaryContext,
   summarizeAsset as summarizeAssetFlow,
-} from "./flows/asset/summary.js";
-import type {
-  AssetSummaryContext,
-  AssetSummaryContextInput,
-  SummarizeAssetArgs,
-} from "./flows/asset/types.js";
+} from "../run/flows/asset/summary.js";
+import type { AssetSummaryContextInput, SummarizeAssetArgs } from "../run/flows/asset/types.js";
 import {
   createUrlFlowContext,
   type UrlFlowContext,
   type UrlFlowEventHooks,
   type UrlFlowRuntimeHooks,
-} from "./flows/url/types.js";
-import type { PerfTrace } from "./perf-trace.js";
-
-type SummarizeMediaFile = typeof import("./flows/asset/media.js").summarizeMediaFile;
+} from "../run/flows/url/types.js";
+import type { PerfTrace } from "../run/perf-trace.js";
 
 export function createRunFlowContexts(options: {
   cacheState: CacheState;
@@ -135,38 +128,5 @@ export function createRunFlowContexts(options: {
       },
       eventHooks,
     }),
-  };
-}
-
-export function createRunnerAssetInputContext({
-  summarizeMediaFileImpl,
-  assetSummaryContext,
-  progressEnabled,
-  trackedFetch,
-  setClearProgressBeforeStdout,
-  clearProgressIfCurrent,
-}: {
-  summarizeMediaFileImpl: SummarizeMediaFile;
-  assetSummaryContext: AssetSummaryContext;
-  progressEnabled: boolean;
-  trackedFetch: typeof fetch;
-  setClearProgressBeforeStdout: AssetInputContext["setClearProgressBeforeStdout"];
-  clearProgressIfCurrent: AssetInputContext["clearProgressIfCurrent"];
-}): AssetInputContext {
-  const summarizeAsset = (args: SummarizeAssetArgs) =>
-    summarizeAssetFlow(assetSummaryContext, args);
-  const summarizeMediaFile = (args: Parameters<SummarizeMediaFile>[1]) =>
-    summarizeMediaFileImpl(assetSummaryContext, args);
-  return {
-    env: assetSummaryContext.env,
-    envForRun: assetSummaryContext.envForRun,
-    stderr: assetSummaryContext.stderr,
-    progressEnabled,
-    timeoutMs: assetSummaryContext.timeoutMs,
-    trackedFetch,
-    summarizeAsset,
-    summarizeMediaFile,
-    setClearProgressBeforeStdout,
-    clearProgressIfCurrent,
   };
 }
