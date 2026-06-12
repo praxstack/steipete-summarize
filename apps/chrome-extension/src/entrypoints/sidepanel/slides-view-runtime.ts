@@ -2,7 +2,6 @@ import { shouldPreferUrlMode } from "@steipete/summarize-core/content/url";
 import type MarkdownIt from "markdown-it";
 import { logExtensionEvent } from "../../lib/extension-logs";
 import type { SseSlidesData } from "../../lib/runtime-contracts";
-import type { SlidesLayout } from "../../lib/settings";
 import { applyPanelStateAction, type PanelStateAction } from "./panel-state-store";
 import { createSlideImageLoader, normalizeSlideImageUrl } from "./slide-images";
 import {
@@ -11,10 +10,11 @@ import {
   slidesPayloadChanged,
 } from "./slides-payload";
 import { createSlidesRenderer } from "./slides-renderer";
+import { resolveSlidesInputMode } from "./slides-session-state";
 import { formatSlideTimestamp } from "./slides-state";
 import type { SlideSummarySource } from "./slides-text-controller";
 import { renderSummaryMarkdownDisplay } from "./summary-renderer";
-import type { PanelPhase, PanelState, UiState } from "./types";
+import type { PanelState } from "./types";
 
 export function createSlidesViewRuntime({
   renderMarkdownHostEl,
@@ -29,21 +29,8 @@ export function createSlidesViewRuntime({
   send,
   refreshSummarizeControl,
   hideSlideNotice,
-  getState,
+  panelState,
   dispatchPanelState,
-  setSlidesBusyValue,
-  getSlidesBusy,
-  setSlidesContextPending,
-  getSlidesContextPending,
-  setSlidesContextUrl,
-  getSlidesContextUrl,
-  setSlidesSeededSourceId,
-  getSlidesSeededSourceId,
-  setSlidesAppliedRunId,
-  getSlidesAppliedRunId,
-  resolveActiveSlidesRunId,
-  nextSlidesContextRequestId,
-  setSlidesExpanded,
   getFallbackSummaryMarkdown,
 }: {
   renderMarkdownHostEl: HTMLElement;
@@ -74,32 +61,8 @@ export function createSlidesViewRuntime({
   ) => Promise<void>;
   refreshSummarizeControl: () => void;
   hideSlideNotice: () => void;
-  getState: () => {
-    activeTabUrl: string | null;
-    autoSummarize: boolean;
-    currentSourceTitle: string | null;
-    currentSourceUrl: string | null;
-    inputMode: "page" | "video";
-    panelState: PanelState;
-    slidesEnabled: boolean;
-    slidesLayout: SlidesLayout;
-    slidesExpanded: boolean;
-    mediaAvailable: boolean;
-  };
+  panelState: PanelState;
   dispatchPanelState?: (action: PanelStateAction) => void;
-  setSlidesBusyValue: (value: boolean) => void;
-  getSlidesBusy: () => boolean;
-  setSlidesContextPending: (value: boolean) => void;
-  getSlidesContextPending: () => boolean;
-  setSlidesContextUrl: (value: string | null) => void;
-  getSlidesContextUrl: () => string | null;
-  setSlidesSeededSourceId: (value: string | null) => void;
-  getSlidesSeededSourceId: () => string | null;
-  setSlidesAppliedRunId: (value: string | null) => void;
-  getSlidesAppliedRunId: () => string | null;
-  resolveActiveSlidesRunId: () => string | null;
-  nextSlidesContextRequestId: () => number;
-  setSlidesExpanded: (value: boolean) => void;
   getFallbackSummaryMarkdown?: () => string | null;
 }) {
   const slideImageLoader = createSlideImageLoader();
@@ -107,8 +70,16 @@ export function createSlidesViewRuntime({
     if (dispatchPanelState) {
       dispatchPanelState(action);
     } else {
-      applyPanelStateAction(getState().panelState, action);
+      applyPanelStateAction(panelState, action);
     }
+  };
+  const updateSlidesSession = (value: Partial<PanelState["slidesSession"]>) => {
+    dispatch({ type: "slides-session-update", value });
+  };
+  const resolveActiveSlidesRunId = () => {
+    if (panelState.slidesRunId) return panelState.slidesRunId;
+    if (panelState.slides && panelState.runId) return panelState.runId;
+    return null;
   };
 
   const seekToSlideTimestamp = (seconds: number | null | undefined) => {
@@ -170,21 +141,18 @@ export function createSlidesViewRuntime({
   const slidesRenderer = createSlidesRenderer({
     hostEl: renderSlidesHostEl,
     markdownHostEl: renderMarkdownHostEl,
-    getState: () => {
-      const state = getState();
-      return {
-        slidesEnabled: state.slidesEnabled,
-        inputMode: state.inputMode,
-        preferredLayout: state.slidesLayout,
-        slidesExpanded: state.slidesExpanded,
-        slides: state.panelState.slides,
-        descriptions: slidesTextController.getDescriptions(),
-        titles: slidesTextController.getTitles(),
-      };
-    },
+    getState: () => ({
+      slidesEnabled: panelState.slidesSession.slidesEnabled,
+      inputMode: resolveSlidesInputMode(panelState.slidesSession),
+      preferredLayout: panelState.slidesSession.slidesLayout,
+      slidesExpanded: panelState.slidesSession.slidesExpanded,
+      slides: panelState.slides,
+      descriptions: slidesTextController.getDescriptions(),
+      titles: slidesTextController.getTitles(),
+    }),
     ensureDescriptions: rebuildSlideDescriptions,
     onSeek: seekToSlideTimestamp,
-    setExpanded: setSlidesExpanded,
+    setExpanded: (slidesExpanded) => updateSlidesSession({ slidesExpanded }),
     updateThumb: updateSlideThumb,
     updateMeta: updateSlideMeta,
   });
@@ -194,48 +162,46 @@ export function createSlidesViewRuntime({
   };
 
   const renderMarkdownDisplay = () => {
-    const state = getState();
     renderSummaryMarkdownDisplay({
-      activeTabUrl: state.activeTabUrl,
-      autoSummarize: state.autoSummarize,
-      currentSourceTitle: state.currentSourceTitle,
-      currentSourceUrl: state.currentSourceUrl,
-      hasSlides: Boolean(state.panelState.slides?.slides.length),
+      activeTabUrl: panelState.navigation.activeTabUrl,
+      autoSummarize: panelState.panelSession.autoSummarize,
+      currentSourceTitle: panelState.currentSource?.title ?? null,
+      currentSourceUrl: panelState.currentSource?.url ?? null,
+      hasSlides: Boolean(panelState.slides?.slides.length),
       headerSetStatus,
       hostEl: renderMarkdownHostEl,
       copyButtonEl: summaryCopyBtn,
-      inputMode: state.inputMode,
-      markdown: state.panelState.summaryMarkdown ?? "",
+      inputMode: resolveSlidesInputMode(panelState.slidesSession),
+      markdown: panelState.summaryMarkdown ?? "",
       md,
-      phase: state.panelState.phase,
+      phase: panelState.phase,
       renderInlineSlides,
-      slidesEnabled: state.slidesEnabled,
-      slidesLayout: state.slidesLayout,
-      tabTitle: state.panelState.ui?.tab.title ?? null,
-      tabUrl: state.panelState.ui?.tab.url ?? null,
+      slidesEnabled: panelState.slidesSession.slidesEnabled,
+      slidesLayout: panelState.slidesSession.slidesLayout,
+      tabTitle: panelState.ui?.tab.title ?? null,
+      tabUrl: panelState.ui?.tab.url ?? null,
     });
   };
 
   const renderEmptySummaryState = () => {
-    const state = getState();
     renderSummaryMarkdownDisplay({
-      activeTabUrl: state.activeTabUrl,
-      autoSummarize: state.autoSummarize,
-      currentSourceTitle: state.currentSourceTitle,
-      currentSourceUrl: state.currentSourceUrl,
-      hasSlides: Boolean(state.panelState.slides?.slides.length),
+      activeTabUrl: panelState.navigation.activeTabUrl,
+      autoSummarize: panelState.panelSession.autoSummarize,
+      currentSourceTitle: panelState.currentSource?.title ?? null,
+      currentSourceUrl: panelState.currentSource?.url ?? null,
+      hasSlides: Boolean(panelState.slides?.slides.length),
       headerSetStatus,
       hostEl: renderMarkdownHostEl,
       copyButtonEl: summaryCopyBtn,
-      inputMode: state.inputMode,
+      inputMode: resolveSlidesInputMode(panelState.slidesSession),
       markdown: "",
       md,
-      phase: state.panelState.phase,
+      phase: panelState.phase,
       renderInlineSlides,
-      slidesEnabled: state.slidesEnabled,
-      slidesLayout: state.slidesLayout,
-      tabTitle: state.panelState.ui?.tab.title ?? null,
-      tabUrl: state.panelState.ui?.tab.url ?? null,
+      slidesEnabled: panelState.slidesSession.slidesEnabled,
+      slidesLayout: panelState.slidesSession.slidesLayout,
+      tabTitle: panelState.ui?.tab.title ?? null,
+      tabUrl: panelState.ui?.tab.url ?? null,
     });
   };
 
@@ -249,7 +215,6 @@ export function createSlidesViewRuntime({
   };
 
   const renderMarkdown = (markdown: string) => {
-    const state = getState();
     dispatch({ type: "summary", markdown });
     updateSlideSummaryFromMarkdown(markdown, {
       preserveIfEmpty: slidesTextController.hasSummaryTitles(),
@@ -260,8 +225,8 @@ export function createSlidesViewRuntime({
   };
 
   const setSlidesBusy = (next: boolean) => {
-    if (getSlidesBusy() === next) return;
-    setSlidesBusyValue(next);
+    if (panelState.slidesSession.slidesBusy === next) return;
+    updateSlidesSession({ slidesBusy: next });
     const toggle = document.querySelector<HTMLButtonElement>(".summarizeSlideToggle");
     if (toggle) {
       toggle.dataset.busy = next ? "true" : "false";
@@ -271,13 +236,15 @@ export function createSlidesViewRuntime({
   };
 
   const requestSlidesContext = async () => {
-    const state = getState();
-    if (!state.panelState.slides || getSlidesContextPending()) return;
-    const sourceUrl = state.panelState.slides.sourceUrl || state.currentSourceUrl || null;
-    if (sourceUrl && getSlidesContextUrl() === sourceUrl) return;
-    setSlidesContextPending(true);
-    const requestId = `slides-${nextSlidesContextRequestId()}`;
-    setSlidesContextUrl(sourceUrl);
+    if (!panelState.slides || panelState.slidesSession.slidesContextPending) return;
+    const sourceUrl = panelState.slides.sourceUrl || panelState.currentSource?.url || null;
+    if (sourceUrl && panelState.slidesSession.slidesContextUrl === sourceUrl) return;
+    dispatch({ type: "slides-context-request-next" });
+    const requestId = `slides-${panelState.slidesSession.slidesContextRequestId}`;
+    updateSlidesSession({
+      slidesContextPending: true,
+      slidesContextUrl: sourceUrl,
+    });
     void send({ type: "panel:slides-context", requestId, url: sourceUrl ?? undefined });
   };
 
@@ -285,11 +252,10 @@ export function createSlidesViewRuntime({
     data: SseSlidesData,
     setSlidesTranscriptTimedText: (value: string | null) => void,
   ) => {
-    const state = getState();
     const safePayload = normalizeSlidesPayload(data);
     if (!safePayload) return;
     const isSameSource = Boolean(
-      state.panelState.slides && state.panelState.slides.sourceId === safePayload.sourceId,
+      panelState.slides && panelState.slides.sourceId === safePayload.sourceId,
     );
     const activeSlidesRunId = resolveActiveSlidesRunId();
     const normalized: SseSlidesData = {
@@ -313,43 +279,48 @@ export function createSlidesViewRuntime({
         },
       });
     }
-    const shouldReplaceSeeded = getSlidesSeededSourceId() === safePayload.sourceId;
-    const merged = resolveSlidesPayload(state.panelState.slides, normalized, {
-      seededSourceId: getSlidesSeededSourceId(),
+    const shouldReplaceSeeded =
+      panelState.slidesSession.slidesSeededSourceId === safePayload.sourceId;
+    const merged = resolveSlidesPayload(panelState.slides, normalized, {
+      seededSourceId: panelState.slidesSession.slidesSeededSourceId,
       activeSlidesRunId,
-      appliedSlidesRunId: getSlidesAppliedRunId(),
+      appliedSlidesRunId: panelState.slidesSession.slidesAppliedRunId,
     });
     if (shouldReplaceSeeded) {
-      setSlidesSeededSourceId(null);
+      updateSlidesSession({ slidesSeededSourceId: null });
     }
-    if (!slidesPayloadChanged(state.panelState.slides, merged)) {
+    if (!slidesPayloadChanged(panelState.slides, merged)) {
       if (activeSlidesRunId) {
-        setSlidesAppliedRunId(activeSlidesRunId);
+        updateSlidesSession({ slidesAppliedRunId: activeSlidesRunId });
       }
       return;
     }
     dispatch({ type: "slides", slides: merged });
     if (activeSlidesRunId) {
-      setSlidesAppliedRunId(activeSlidesRunId);
+      updateSlidesSession({ slidesAppliedRunId: activeSlidesRunId });
     }
     if (!isSameSource) {
-      setSlidesContextPending(false);
-      setSlidesContextUrl(null);
+      updateSlidesSession({
+        slidesContextPending: false,
+        slidesContextUrl: null,
+      });
       setSlidesTranscriptTimedText(null);
     }
     if (!normalized.transcriptTimedText) {
-      const sourceUrl = normalized.sourceUrl || state.currentSourceUrl || "";
+      const sourceUrl = normalized.sourceUrl || panelState.currentSource?.url || "";
       if (sourceUrl && !shouldPreferUrlMode(sourceUrl)) {
         void requestSlidesContext();
       }
     }
     if (normalized.transcriptTimedText) {
       setSlidesTranscriptTimedText(normalized.transcriptTimedText);
-      setSlidesContextUrl(normalized.sourceUrl || state.currentSourceUrl || null);
-      setSlidesContextPending(false);
+      updateSlidesSession({
+        slidesContextUrl: normalized.sourceUrl || panelState.currentSource?.url || null,
+        slidesContextPending: false,
+      });
     }
     updateSlidesTextState();
-    const summaryMarkdown = state.panelState.summaryMarkdown || getFallbackSummaryMarkdown?.();
+    const summaryMarkdown = panelState.summaryMarkdown || getFallbackSummaryMarkdown?.();
     if (summaryMarkdown) {
       updateSlideSummaryFromMarkdown(summaryMarkdown, {
         preserveIfEmpty: true,

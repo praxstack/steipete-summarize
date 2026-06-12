@@ -178,10 +178,6 @@ const getPanelSession = () => panelState.panelSession;
 const updatePanelSession = (value: Partial<typeof panelState.panelSession>) => {
   panelStateStore.dispatch({ type: "panel-session-update", value });
 };
-const nextSlidesContextRequestId = () => {
-  panelStateStore.dispatch({ type: "slides-context-request-next" });
-  return panelState.slidesSession.slidesContextRequestId;
-};
 
 const panelMessagingRuntime = createPanelMessagingRuntime({
   panelState,
@@ -926,44 +922,8 @@ slidesViewRuntime = createSlidesViewRuntime({
   send,
   refreshSummarizeControl,
   hideSlideNotice,
-  getState: () => ({
-    activeTabUrl: getActiveTabUrl(),
-    autoSummarize: getPanelSession().autoSummarize,
-    currentSourceTitle: panelState.currentSource?.title ?? null,
-    currentSourceUrl: panelState.currentSource?.url ?? null,
-    inputMode: resolveSlidesInputMode(getSlidesState()),
-    panelState,
-    slidesEnabled: getSlidesState().slidesEnabled,
-    slidesLayout: getSlidesState().slidesLayout,
-    slidesExpanded: getSlidesState().slidesExpanded,
-    mediaAvailable: getSlidesState().mediaAvailable,
-  }),
+  panelState,
   dispatchPanelState: panelStateStore.dispatch,
-  setSlidesBusyValue: (value) => {
-    updateSlidesState({ slidesBusy: value });
-  },
-  getSlidesBusy: () => getSlidesState().slidesBusy,
-  setSlidesContextPending: (value) => {
-    updateSlidesState({ slidesContextPending: value });
-  },
-  getSlidesContextPending: () => getSlidesState().slidesContextPending,
-  setSlidesContextUrl: (value) => {
-    updateSlidesState({ slidesContextUrl: value });
-  },
-  getSlidesContextUrl: () => getSlidesState().slidesContextUrl,
-  setSlidesSeededSourceId: (value) => {
-    updateSlidesState({ slidesSeededSourceId: value });
-  },
-  getSlidesSeededSourceId: () => getSlidesState().slidesSeededSourceId,
-  setSlidesAppliedRunId: (value) => {
-    updateSlidesState({ slidesAppliedRunId: value });
-  },
-  getSlidesAppliedRunId: () => getSlidesState().slidesAppliedRunId,
-  resolveActiveSlidesRunId,
-  nextSlidesContextRequestId,
-  setSlidesExpanded: (value) => {
-    updateSlidesState({ slidesExpanded: value });
-  },
   getFallbackSummaryMarkdown: getRetainedSlideSummaryMarkdown,
 });
 
