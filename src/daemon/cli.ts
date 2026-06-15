@@ -265,8 +265,8 @@ function resolveRepoRootForDev(): string {
   return parts.slice(0, srcIndex).join(path.sep);
 }
 
-async function resolveTsxCliPath(repoRoot: string): Promise<string> {
-  const candidate = path.join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
+async function resolveTypeScriptRegisterPath(repoRoot: string): Promise<string> {
+  const candidate = path.join(repoRoot, "scripts", "register-typescript.mjs");
   await fs.access(candidate);
   return candidate;
 }
@@ -297,11 +297,11 @@ async function resolveDaemonProgramArguments({
     }
   }
   const repoRoot = resolveRepoRootForDev();
-  const tsxCliPath = await resolveTsxCliPath(repoRoot);
+  const registerPath = await resolveTypeScriptRegisterPath(repoRoot);
   const devCliPath = path.join(repoRoot, "src", "cli.ts");
   await fs.access(devCliPath);
   return {
-    programArguments: [nodePath, tsxCliPath, devCliPath, "daemon", "run"],
+    programArguments: [nodePath, "--import", registerPath, devCliPath, "daemon", "run"],
     workingDirectory: repoRoot,
   };
 }

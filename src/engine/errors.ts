@@ -1,13 +1,12 @@
 export type EngineErrorCode = "ASSET_LIKE_HTML_FETCH" | "SUMMARY_STREAM_INTERRUPTED";
 
 export class EngineError extends Error {
-  constructor(
-    readonly code: EngineErrorCode,
-    message: string,
-    options?: ErrorOptions,
-  ) {
+  readonly code: EngineErrorCode;
+
+  constructor(code: EngineErrorCode, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "EngineError";
+    this.code = code;
   }
 }
 

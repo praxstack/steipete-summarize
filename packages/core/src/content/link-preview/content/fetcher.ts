@@ -40,11 +40,9 @@ export type AssetLikeHtmlFetchReason = "binary-payload" | "content-type" | "cont
 
 export class AssetLikeHtmlFetchError extends Error {
   readonly code = "ASSET_LIKE_HTML_FETCH";
+  readonly reason: AssetLikeHtmlFetchReason;
 
-  constructor(
-    readonly reason: AssetLikeHtmlFetchReason,
-    detail?: string | null,
-  ) {
+  constructor(reason: AssetLikeHtmlFetchReason, detail?: string | null) {
     const label =
       reason === "binary-payload"
         ? "Unsupported binary payload for HTML document fetch"
@@ -53,6 +51,7 @@ export class AssetLikeHtmlFetchError extends Error {
           : `Unsupported content-disposition for HTML document fetch: ${detail ?? "unknown"}`;
     super(label);
     this.name = "AssetLikeHtmlFetchError";
+    this.reason = reason;
   }
 }
 

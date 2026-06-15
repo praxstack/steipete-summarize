@@ -428,7 +428,7 @@ export function buildDaemonHelp(): string {
     "  Windows: Scheduled Task",
     "",
     "Options:",
-    "  --dev            Install service that runs src/cli.ts via tsx (repo dev mode)",
+    "  --dev            Install service that runs src/cli.ts via Node (repo dev mode)",
     "  --port <n>       (default: 8787)",
     "  --token <token>  (required for install)",
   ].join("\n");

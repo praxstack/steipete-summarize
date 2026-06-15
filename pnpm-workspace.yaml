@@ -25,6 +25,8 @@ overrides:
   vite: 8.0.10
   # Vitest tests use happy-dom; do not install its unused optional jsdom peer.
   "vitest>jsdom": "-"
-
-onlyBuiltDependencies:
-  - esbuild
+  # WXT 0.20.26 declares esbuild but its shipped runtime does not import it.
+  "wxt>esbuild": "-"
+  # Vite 8 uses Rolldown/Oxc here; do not auto-install its legacy optional peers.
+  "vite>esbuild": "-"
+  "vite>tsx": "-"

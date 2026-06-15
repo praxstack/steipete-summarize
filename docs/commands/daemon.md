@@ -76,7 +76,7 @@ summarize daemon run --port 8787
 : Bearer token. Required for `install`. Stored in `~/.summarize/daemon.json` (mode `0600`).
 
 `--dev`
-: Install a service that runs `src/cli.ts` via `tsx` from the current repo. Useful while hacking on the daemon — don't ship it to users.
+: Install a service that runs `src/cli.ts` via Node's native TypeScript support from the current repo. Useful while hacking on the daemon — don't ship it to users.
 
 ## HTTP endpoints
 

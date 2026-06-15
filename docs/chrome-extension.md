@@ -32,7 +32,7 @@ Firefox notes:
 
 Dev (repo checkout):
 
-- Use: `pnpm summarize daemon install --token <TOKEN> --dev` (autostart service runs `src/cli.ts` via `tsx`, no `dist/` build required).
+- Use: `pnpm summarize daemon install --token <TOKEN> --dev` (autostart service runs `src/cli.ts` via Node's native TypeScript support; no `dist/` build required).
 - E2E (Playwright): `pnpm -C apps/chrome-extension test:e2e`
   - First run: `pnpm -C apps/chrome-extension exec playwright install chromium`
   - Chromium runs headless by default.

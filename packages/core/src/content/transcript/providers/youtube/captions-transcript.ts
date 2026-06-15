@@ -9,13 +9,13 @@ import { sanitizeYoutubeJsonResponse } from "../../utils.js";
 import { extractYoutubeiBootstrap } from "./api.js";
 import { extractInitialPlayerResponse, extractInnertubeApiKey } from "./captions-player.js";
 import {
-  CaptionListRenderer,
-  CaptionsPayload,
   REQUEST_HEADERS,
-  TranscriptPayload,
-  YoutubePlayerContext,
-  YoutubeTranscriptContext,
   isObjectLike,
+  type CaptionListRenderer,
+  type CaptionsPayload,
+  type TranscriptPayload,
+  type YoutubePlayerContext,
+  type YoutubeTranscriptContext,
 } from "./captions-shared.js";
 
 async function fetchTranscriptViaAndroidPlayer(
