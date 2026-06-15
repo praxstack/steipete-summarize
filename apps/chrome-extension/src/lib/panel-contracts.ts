@@ -19,6 +19,7 @@ export type UiState = {
     slideRuntime: "browser" | "daemon";
     summaryRuntime: "direct" | "daemon";
     providerConfigured: boolean;
+    daemonHintDismissed: boolean;
     fontSize: number;
     lineHeight: number;
     model: string;

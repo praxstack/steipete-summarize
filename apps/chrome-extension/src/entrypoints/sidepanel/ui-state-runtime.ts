@@ -74,6 +74,7 @@ type UiStateRuntimeOpts = {
   setSlidesLayout: (value: string) => void;
   maybeSeedPlannedSlidesForPendingRun: () => void;
   refreshSummarizeControl: () => void;
+  updateDaemonHint: (state: UiState) => void;
   maybeShowSetup: (state: UiState) => SetupDisplay;
   setPhase: (phase: PanelPhase, opts?: { error?: string | null }) => void;
   renderMarkdownDisplay: () => void;
@@ -411,6 +412,7 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
     });
     opts.maybeSeedPlannedSlidesForPendingRun();
     opts.refreshSummarizeControl();
+    opts.updateDaemonHint(state);
     const setupDisplay = opts.maybeShowSetup(state);
     if (setupDisplay === "blocking" && opts.panelState.phase !== "setup") {
       opts.setPhase("setup");

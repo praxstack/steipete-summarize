@@ -55,6 +55,14 @@ describe("chrome/settings", () => {
     expect(loaded.slidesOcrEnabled).toBe(true);
   });
 
+  it("persists daemon hint dismissal", async () => {
+    await patchSettings({ daemonHintDismissed: true });
+    expect((await loadSettings()).daemonHintDismissed).toBe(true);
+
+    storage.settings = { daemonHintDismissed: "yes" };
+    expect((await loadSettings()).daemonHintDismissed).toBe(false);
+  });
+
   it("normalizes slide runtime preferences", async () => {
     await patchSettings({ slideRuntime: "daemon" });
     expect((await loadSettings()).slideRuntime).toBe("daemon");

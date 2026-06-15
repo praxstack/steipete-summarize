@@ -21,6 +21,7 @@ export type Settings = {
   provider: DirectProvider;
   providerApiKeys: Partial<Record<DirectProvider, string>>;
   providerBaseUrls: Partial<Record<DirectProvider, string>>;
+  daemonHintDismissed: boolean;
   autoSummarize: boolean;
   hoverSummaries: boolean;
   chatEnabled: boolean;
@@ -394,6 +395,7 @@ export const defaultSettings: Settings = {
   provider: "openai",
   providerApiKeys: {},
   providerBaseUrls: {},
+  daemonHintDismissed: false,
   autoSummarize: true,
   hoverSummaries: false,
   chatEnabled: true,
@@ -458,6 +460,10 @@ export async function loadSettings(): Promise<Settings> {
     provider: normalizeProvider(raw.provider),
     providerApiKeys: normalizeProviderMap(raw.providerApiKeys),
     providerBaseUrls: normalizeProviderMap(raw.providerBaseUrls),
+    daemonHintDismissed:
+      typeof raw.daemonHintDismissed === "boolean"
+        ? raw.daemonHintDismissed
+        : defaultSettings.daemonHintDismissed,
     model: normalizeModel(raw.model, raw),
     length: normalizeLength(raw.length),
     language: normalizeLanguage(raw.language),

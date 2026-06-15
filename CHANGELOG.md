@@ -9,6 +9,7 @@
 
 ### Fixes
 
+- Chrome extension: keep the default Direct/Gemini Nano experience immediately usable and show daemon performance and capability guidance as a compact dismissible hint.
 - Chrome extension: preserve significant whitespace in SSE data fields while parsing daemon streams (#303, thanks @vincent-peng).
 - Chrome extension: invoke Gemini Nano session methods with their native receiver so Browser summaries complete instead of silently falling back.
 - Chrome extension slides: sample browser-captured frames across the full video duration so long videos include their final segment.

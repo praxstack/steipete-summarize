@@ -39,6 +39,7 @@ export type UiState = {
     slideRuntime?: "browser" | "daemon";
     summaryRuntime?: "direct" | "daemon";
     providerConfigured?: boolean;
+    daemonHintDismissed: boolean;
     model: string;
     length: string;
     tokenPresent: boolean;
@@ -64,6 +65,7 @@ const defaultUiState: UiState = {
     slideRuntime: "browser",
     summaryRuntime: "direct",
     providerConfigured: false,
+    daemonHintDismissed: false,
     model: "auto",
     length: "xl",
     tokenPresent: true,

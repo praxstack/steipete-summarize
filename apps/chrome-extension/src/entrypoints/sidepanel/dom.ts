@@ -11,6 +11,9 @@ export function createSidepanelDom() {
   if (!headerEl) throw new Error("Missing <header>");
   const progressFillEl = byId<HTMLDivElement>("progressFill");
   const drawerEl = byId<HTMLElement>("drawer");
+  const daemonHintEl = byId<HTMLDivElement>("daemonHint");
+  const daemonHintActionBtn = byId<HTMLButtonElement>("daemonHintAction");
+  const daemonHintCloseBtn = byId<HTMLButtonElement>("daemonHintClose");
   const setupEl = byId<HTMLDivElement>("setup");
   const errorEl = byId<HTMLDivElement>("error");
   const errorMessageEl = byId<HTMLParagraphElement>("errorMessage");
@@ -93,6 +96,9 @@ export function createSidepanelDom() {
     chatQueueEl,
     chatSendBtn,
     clearBtn,
+    daemonHintActionBtn,
+    daemonHintCloseBtn,
+    daemonHintEl,
     drawerEl,
     drawerToggleBtn,
     errorEl,

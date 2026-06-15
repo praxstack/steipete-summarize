@@ -58,6 +58,7 @@ function makeUiState(overrides?: Partial<UiState>): UiState {
       slideRuntime: "browser",
       summaryRuntime: "direct",
       providerConfigured: false,
+      daemonHintDismissed: false,
       fontSize: 15,
       lineHeight: 1.6,
       model: "auto",

@@ -2,6 +2,7 @@ import type { BgToPanel, UiState } from "../../lib/panel-contracts";
 import type { SlidesLayout } from "../../lib/settings";
 import type { createAppearanceControls } from "./appearance-controls";
 import { createSidepanelBgMessageRuntime } from "./bg-message-runtime";
+import type { createDaemonHintRuntime } from "./daemon-hint-runtime";
 import type { SidepanelDom } from "./dom";
 import type { PanelCachePayload } from "./panel-cache";
 import type { createPanelMessagingRuntime } from "./panel-messaging";
@@ -15,6 +16,7 @@ import type { createTypographyController } from "./typography-controller";
 import { createUiStateRuntime } from "./ui-state-runtime";
 
 type AppearanceControls = ReturnType<typeof createAppearanceControls>;
+type DaemonHintRuntime = ReturnType<typeof createDaemonHintRuntime>;
 type PanelMessagingRuntime = ReturnType<typeof createPanelMessagingRuntime>;
 type PresentationRuntime = ReturnType<typeof createSidepanelPresentationRuntime>;
 type RunRuntime = ReturnType<typeof createSidepanelRunRuntime>;
@@ -33,6 +35,7 @@ export function createSidepanelStateEffectsRuntime({
   runRuntime,
   sessionRuntime,
   setupControlsRuntime,
+  daemonHintRuntime,
 }: {
   dom: SidepanelDom;
   panelState: PanelState;
@@ -44,6 +47,7 @@ export function createSidepanelStateEffectsRuntime({
   runRuntime: RunRuntime;
   sessionRuntime: SessionRuntime;
   setupControlsRuntime: SetupControlsRuntime;
+  daemonHintRuntime: DaemonHintRuntime;
 }) {
   const {
     isStreaming,
@@ -115,6 +119,7 @@ export function createSidepanelStateEffectsRuntime({
     },
     maybeSeedPlannedSlidesForPendingRun: plannedSlidesRuntime.maybeSeedPendingRun,
     refreshSummarizeControl,
+    updateDaemonHint: daemonHintRuntime.update,
     maybeShowSetup,
     setPhase,
     renderMarkdownDisplay,
