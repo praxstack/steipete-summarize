@@ -4,7 +4,7 @@
 
 ### Fixes
 
-- Chrome extension direct providers: accept a final SSE event without a trailing blank-line terminator.
+- Streaming: share EOF-safe, whitespace-preserving SSE parsing across core, CLI providers, and extension clients.
 - Config: preserve standalone `enabled: false` values for cache, media cache, slides, and logging sections.
 
 ## 0.19.0 - 2026-06-17

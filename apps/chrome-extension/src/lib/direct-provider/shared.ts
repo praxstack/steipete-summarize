@@ -1,4 +1,10 @@
-import type { AssistantMessage, Message, Tool, ToolCall } from "@earendil-works/pi-ai";
+import {
+  type AgentAssistantMessage as AssistantMessage,
+  type AgentMessage as Message,
+  type AgentTool as Tool,
+  type AgentToolCall as ToolCall,
+  parseSseStream,
+} from "@steipete/summarize-core/runtime";
 import { providerLabel, type DirectModelConfig } from "./config";
 
 export type DirectStreamEvent =
@@ -59,39 +65,12 @@ export function safeJsonObject(raw: string): Record<string, unknown> {
   }
 }
 
-function parseSseBlock(block: string): { event: string; data: string } | null {
-  let event = "message";
-  const data: string[] = [];
-  for (const line of block.split(/\r?\n/)) {
-    if (line.startsWith("event:")) event = line.slice(6).trim();
-    if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
-  }
-  return data.length > 0 ? { event, data: data.join("\n") } : null;
-}
-
 export async function* parseSse(
   response: Response,
 ): AsyncGenerator<{ event: string; data: string }> {
   if (!response.body) throw new Error("Provider returned no response body.");
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += value;
-      while (true) {
-        const boundary = /\r?\n\r?\n/.exec(buffer);
-        if (!boundary || boundary.index == null) break;
-        const parsed = parseSseBlock(buffer.slice(0, boundary.index));
-        buffer = buffer.slice(boundary.index + boundary[0].length);
-        if (parsed) yield parsed;
-      }
-    }
-    const parsed = parseSseBlock(buffer);
-    if (parsed) yield parsed;
-  } finally {
-    reader.releaseLock();
+  for await (const message of parseSseStream(response.body)) {
+    if (message.event !== "__comment__") yield message;
   }
 }
 

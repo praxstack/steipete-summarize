@@ -1,4 +1,4 @@
-import type { Message } from "@earendil-works/pi-ai";
+import type { AgentMessage as Message } from "@steipete/summarize-core/runtime";
 import type MarkdownIt from "markdown-it";
 import type { BgToPanel, PanelToBg } from "../../lib/panel-contracts";
 import { createAutomationRuntime } from "./automation-runtime";

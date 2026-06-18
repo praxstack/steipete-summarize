@@ -41,6 +41,78 @@ export type SseEvent<TAssistant = unknown> =
 
 export type RawSseMessage = { event: string; data: string };
 
+function parseSseField(line: string): { name: string; value: string } {
+  const colonIndex = line.indexOf(":");
+  if (colonIndex === -1) return { name: line, value: "" };
+  const value = line.slice(colonIndex + 1);
+  return {
+    name: line.slice(0, colonIndex),
+    value: value.startsWith(" ") ? value.slice(1) : value,
+  };
+}
+
+export async function* parseSseStream(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<RawSseMessage> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let currentEvent = "message";
+  let dataLines: string[] = [];
+
+  const flush = (): RawSseMessage | null => {
+    const data = dataLines.join("\n");
+    const event = currentEvent || "message";
+    currentEvent = "message";
+    dataLines = [];
+    return data ? { event, data } : null;
+  };
+
+  const processLine = (line: string): RawSseMessage | null => {
+    if (line === "") return flush();
+    if (line.startsWith(":")) {
+      const value = line.slice(1);
+      return {
+        event: "__comment__",
+        data: (value.startsWith(" ") ? value.slice(1) : value).trim(),
+      };
+    }
+    const field = parseSseField(line);
+    if (field.name === "event") {
+      currentEvent = field.value.trim() || "message";
+    } else if (field.name === "data") {
+      dataLines.push(field.value);
+    }
+    return null;
+  };
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      while (true) {
+        const newlineIndex = buffer.indexOf("\n");
+        if (newlineIndex === -1) break;
+        const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
+        buffer = buffer.slice(newlineIndex + 1);
+        const message = processLine(line);
+        if (message) yield message;
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer) {
+      const message = processLine(buffer.replace(/\r$/, ""));
+      if (message) yield message;
+    }
+    const message = flush();
+    if (message) yield message;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export function encodeSseEvent<TAssistant>(event: SseEvent<TAssistant>): string {
   return `event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
 }

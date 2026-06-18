@@ -1,10 +1,10 @@
-import type { Message, Tool } from "@earendil-works/pi-ai";
 import { resolveOutputLanguage } from "@steipete/summarize-core/language";
 import {
   buildLinkSummaryPrompt,
   SUMMARY_LENGTH_TO_TOKENS,
   type SummaryLength,
 } from "@steipete/summarize-core/prompts";
+import type { AgentMessage as Message, AgentTool as Tool } from "@steipete/summarize-core/runtime";
 import type { Settings } from "./settings";
 
 const SUMMARY_LENGTHS = new Set<SummaryLength>(["short", "medium", "long", "xl", "xxl"]);

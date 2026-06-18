@@ -2,9 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 import { chromium, expect, firefox } from "@playwright/test";
+import type {
+  AgentAssistantMessage as AssistantMessage,
+  AgentMessage as Message,
+} from "@steipete/summarize-core/runtime";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const consoleErrorAllowlist: RegExp[] = [];

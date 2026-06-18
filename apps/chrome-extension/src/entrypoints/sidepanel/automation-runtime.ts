@@ -1,4 +1,8 @@
-import type { Message, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type {
+  AgentMessage as Message,
+  AgentToolCall as ToolCall,
+  AgentToolResultMessage as ToolResultMessage,
+} from "@steipete/summarize-core/runtime";
 import { executeToolCall, getAutomationToolNames } from "../../automation/tools";
 import { runChatAgentLoop } from "./chat-agent-loop";
 import type { ChatController } from "./chat-controller";

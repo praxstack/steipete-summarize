@@ -1,4 +1,7 @@
-import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
+import type {
+  AgentAssistantMessage as AssistantMessage,
+  AgentMessage as Message,
+} from "@steipete/summarize-core/runtime";
 import type { SseSlidesData } from "./runtime-contracts";
 
 export type UiState = {

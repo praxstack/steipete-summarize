@@ -1,4 +1,7 @@
-import type { Message, ToolCall } from "@earendil-works/pi-ai";
+import type {
+  AgentMessage as Message,
+  AgentToolCall as ToolCall,
+} from "@steipete/summarize-core/runtime";
 import {
   assistantMessage,
   messageText,

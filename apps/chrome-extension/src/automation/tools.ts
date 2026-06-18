@@ -1,4 +1,8 @@
-import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import {
+  type AgentToolCall as ToolCall,
+  type AgentToolResultMessage as ToolResultMessage,
+  parseSseStream,
+} from "@steipete/summarize-core/runtime";
 import { buildBrowserSummaryPayload } from "../lib/browser-summary";
 import { fetchBrowserUrlContent } from "../lib/browser-url-content";
 import {
@@ -10,7 +14,6 @@ import { completeDirectText } from "../lib/direct-provider";
 import { resolveSummaryExecution } from "../lib/model-routing";
 import { parseSseEvent } from "../lib/runtime-contracts";
 import { getProviderSettings, loadSettings } from "../lib/settings";
-import { parseSseStream } from "../lib/sse";
 import {
   deleteArtifact,
   getArtifactRecord,

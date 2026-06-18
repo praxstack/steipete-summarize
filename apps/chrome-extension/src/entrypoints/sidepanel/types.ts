@@ -1,4 +1,4 @@
-import type { Message } from "@earendil-works/pi-ai";
+import type { AgentMessage as Message } from "@steipete/summarize-core/runtime";
 import type { BrowserAiSummaryInput, RunStart, UiState } from "../../lib/panel-contracts";
 import type { SseSlidesData } from "../../lib/runtime-contracts";
 import type { Settings } from "../../lib/settings";

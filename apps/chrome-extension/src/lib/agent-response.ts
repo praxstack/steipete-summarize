@@ -1,6 +1,8 @@
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import {
+  type AgentAssistantMessage as AssistantMessage,
+  parseSseStream,
+} from "@steipete/summarize-core/runtime";
 import { parseSseEvent } from "./runtime-contracts";
-import { parseSseStream } from "./sse";
 
 type AgentJsonResponse = { ok?: boolean; assistant?: AssistantMessage; error?: string };
 

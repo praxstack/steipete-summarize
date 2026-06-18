@@ -1,10 +1,10 @@
+import { parseSseStream } from "@steipete/summarize-core/runtime";
 import { fetchBrowserUrlContent, isPublicBrowserUrl } from "../../lib/browser-url-content";
 import { streamDirectModel } from "../../lib/direct-provider";
 import { logExtensionEvent } from "../../lib/extension-logs";
 import { resolveCapabilityExecution, resolveCapabilityModel } from "../../lib/model-routing";
 import { parseSseEvent } from "../../lib/runtime-contracts";
 import { getProviderSettings, loadSettings } from "../../lib/settings";
-import { parseSseStream } from "../../lib/sse";
 import { friendlyFetchError } from "./daemon-client";
 
 export type HoverToBg =

@@ -1,5 +1,5 @@
+import { parseSseStream, type RawSseMessage } from "@steipete/summarize-core/runtime";
 import { parseSseEvent, type SseMetaData, type SseSlidesData } from "../../lib/runtime-contracts";
-import { parseSseStream, type SseMessage } from "../../lib/sse";
 import {
   accumulateChatChunk,
   accumulateSummarizeChunk,
@@ -193,7 +193,7 @@ export function createStreamController(options: StreamControllerOptions): Stream
       const nextWithTimeout = async () => {
         if (!useIdleTimeout) return iterator.next();
         let timer: ReturnType<typeof setTimeout> | null = null;
-        const timeoutPromise = new Promise<IteratorResult<SseMessage>>((_, reject) => {
+        const timeoutPromise = new Promise<IteratorResult<RawSseMessage>>((_, reject) => {
           timer = setTimeout(() => {
             const error = new Error(idleTimeoutMessage);
             error.name = "IdleTimeoutError";

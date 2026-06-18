@@ -1,7 +1,7 @@
+import { parseSseStream } from "@steipete/summarize-core/runtime";
 import { readPresetOrCustomValue } from "../../lib/combo";
 import { parseSseEvent } from "../../lib/runtime-contracts";
 import type { Settings } from "../../lib/settings";
-import { parseSseStream } from "../../lib/sse";
 
 type StatusState = "idle" | "running" | "error" | "ok";
 
