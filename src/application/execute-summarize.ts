@@ -1,10 +1,7 @@
-import { pathToFileURL } from "node:url";
 import { isYouTubeUrl } from "@steipete/summarize-core/content/url";
 import type { ExtractedLinkContent } from "../content/index.js";
-import { hasEngineErrorCode } from "../engine/errors.js";
 import { buildUrlPrompt } from "../engine/web-prompt.js";
 import { resolveUrlSummaryExecution, type UrlSummaryResolution } from "../engine/web-summary.js";
-import { executeUrlFlow } from "../run/flows/url/flow.js";
 import type { UrlFlowContext } from "../run/flows/url/types.js";
 import { createAcquiredAssetExecutor } from "./asset-execution.js";
 import {
@@ -16,12 +13,6 @@ import {
   bindSummarizeExecutionEvents,
   type PreparedSummarizeExecution,
 } from "./execution-resources.js";
-import {
-  acquireRemoteAssetInput,
-  createRemoteMediaInput,
-  materializeAcquiredMediaInput,
-  resolveUrlAssetRoute,
-} from "./input-acquisition.js";
 import type {
   ExtractionResult,
   SummarizeEvent,
@@ -37,6 +28,7 @@ import {
   type SummarizeExecutionDetails,
   type SummarizeExtractionDetails,
 } from "./url-result.js";
+import { executeUrlWithAssetFallback, resolveInitialUrlInput } from "./url-routing.js";
 import { createSummarizeRuntimeResources } from "./url-runtime.js";
 
 const ignoreEvent: SummarizeEventSink = () => {};
@@ -178,17 +170,6 @@ function toEventInput(input: SummarizeRequest["input"]): SummarizeEventInput {
   return input;
 }
 
-function canRetryUrlFlowAfterAssetMiss(ctx: UrlFlowContext): boolean {
-  return ctx.flags.firecrawlMode !== "off" && ctx.model.apiStatus.firecrawlConfigured;
-}
-
-function allowUrlFlowFirecrawlFallback(ctx: UrlFlowContext): UrlFlowContext {
-  return {
-    ...ctx,
-    flags: { ...ctx.flags, throwOnAssetLikeHtmlError: false },
-  };
-}
-
 export async function executeSummarize(
   request: SummarizeRequest,
   runtime: SummarizeRuntime,
@@ -254,51 +235,19 @@ export async function executeSummarize(
       getSelectedModel: () => usedModel,
     });
 
-    const rawUrlInput = executionInput.kind === "input-url" ? executionInput : null;
-    if (rawUrlInput) {
-      const isYoutubeUrl = prepared?.isYoutubeUrl ?? isYouTubeUrl(rawUrlInput.url);
-      const route = await resolveUrlAssetRoute({
-        url: rawUrlInput.url,
-        isYoutubeUrl,
-        fetchImpl: boundPrepared.urlFlowContext.io.fetch,
-        timeoutMs: boundPrepared.urlFlowContext.flags.timeoutMs,
-        detectUnknownAssetUrls: false,
-      });
-      if (route === "audio" || route === "video") {
-        if (request.slides && route === "video") {
-          executionInput = { ...rawUrlInput, kind: "url" };
-        } else {
-          const acquired = createRemoteMediaInput(rawUrlInput.url);
-          assetExecutor.emitProgress(acquired);
-          executionInput = acquired;
-        }
-      } else if (route === "asset") {
-        emit({
-          type: "input-progress",
-          phase: "loading",
-          source: rawUrlInput.url,
-          filename: null,
-          mediaType: null,
-          sizeBytes: null,
-        });
-        const acquired = await acquireRemoteAssetInput({
-          url: rawUrlInput.url,
-          fetchImpl: boundPrepared.urlFlowContext.io.fetch,
-          timeoutMs: boundPrepared.urlFlowContext.flags.timeoutMs,
-        });
-        if (acquired) {
-          assetExecutor.emitProgress(acquired);
-          executionInput = acquired;
-        } else {
-          executionInput = { ...rawUrlInput, kind: "url" };
-        }
-      } else {
-        executionInput = { ...rawUrlInput, kind: "url" };
-      }
-    }
-    if (executionInput.kind === "input-url") {
-      throw new Error("Internal error: raw input was not resolved");
-    }
+    const routedInput = await resolveInitialUrlInput({
+      input: executionInput,
+      request,
+      isYoutubeUrl:
+        executionInput.kind === "input-url"
+          ? (prepared?.isYoutubeUrl ?? isYouTubeUrl(executionInput.url))
+          : false,
+      ctx: boundPrepared.urlFlowContext,
+      assetExecutor,
+      emit,
+    });
+    executionInput = routedInput.input;
+    const rawUrlInput = routedInput.rawUrlInput;
 
     if (executionInput.kind === "resolved-media" || executionInput.kind === "resolved-asset") {
       return await assetExecutor.execute(executionInput);
@@ -325,78 +274,15 @@ export async function executeSummarize(
     } else {
       emit({ type: "extraction-started", url: executionInput.url });
       const isYoutubeUrl = prepared?.isYoutubeUrl ?? isYouTubeUrl(executionInput.url);
-      const urlResult = await (async () => {
-        try {
-          return await executeUrlFlow({
-            ctx,
-            url: executionInput.url,
-            isYoutubeUrl,
-          });
-        } catch (error) {
-          if (!rawUrlInput || !hasEngineErrorCode(error, "ASSET_LIKE_HTML_FETCH")) {
-            throw error;
-          }
-          emit({
-            type: "input-progress",
-            phase: "loading",
-            source: rawUrlInput.url,
-            filename: null,
-            mediaType: null,
-            sizeBytes: null,
-          });
-          const fallbackRoute = await resolveUrlAssetRoute({
-            url: rawUrlInput.url,
-            isYoutubeUrl,
-            fetchImpl: ctx.io.fetch,
-            timeoutMs: ctx.flags.timeoutMs,
-            detectUnknownAssetUrls: true,
-            assumeAsset: true,
-          });
-          if (
-            (fallbackRoute === "audio" || fallbackRoute === "video") &&
-            (!request.slides || fallbackRoute === "audio")
-          ) {
-            const acquired = createRemoteMediaInput(rawUrlInput.url);
-            assetExecutor.emitProgress(acquired);
-            return await assetExecutor.execute(acquired);
-          }
-          if (fallbackRoute === "asset" || (fallbackRoute === "video" && request.slides)) {
-            const acquired = await acquireRemoteAssetInput({
-              url: rawUrlInput.url,
-              fetchImpl: ctx.io.fetch,
-              timeoutMs: ctx.flags.timeoutMs,
-            });
-            if (acquired) {
-              assetExecutor.emitProgress(acquired);
-              if (
-                acquired.kind === "resolved-media" &&
-                request.slides &&
-                acquired.attachment.mediaType.toLowerCase().startsWith("video/")
-              ) {
-                const materialized = await materializeAcquiredMediaInput(acquired);
-                try {
-                  return await executeUrlFlow({
-                    ctx,
-                    url: pathToFileURL(materialized.filePath).href,
-                    isYoutubeUrl: false,
-                  });
-                } finally {
-                  await materialized.cleanup();
-                }
-              }
-              return await assetExecutor.execute(acquired);
-            }
-          }
-          if (canRetryUrlFlowAfterAssetMiss(ctx)) {
-            return await executeUrlFlow({
-              ctx: allowUrlFlowFirecrawlFallback(ctx),
-              url: executionInput.url,
-              isYoutubeUrl,
-            });
-          }
-          throw error;
-        }
-      })();
+      const urlResult = await executeUrlWithAssetFallback({
+        input: executionInput,
+        rawUrlInput,
+        request,
+        isYoutubeUrl,
+        ctx,
+        assetExecutor,
+        emit,
+      });
       if (
         urlResult.kind === "asset-media" ||
         urlResult.kind === "asset-summary" ||

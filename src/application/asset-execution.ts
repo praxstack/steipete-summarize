@@ -17,10 +17,15 @@ type ResolvedAssetInput = Extract<
   { kind: "resolved-asset" | "resolved-media" }
 >;
 
-type AcquiredAssetExecutionResult =
+export type AcquiredAssetExecutionResult =
   | AssetMediaExecutionResult
   | AssetSummaryExecutionResult
   | AssetExtractionExecutionResult;
+
+export type AcquiredAssetExecutor = {
+  execute: (input: ResolvedAssetInput) => Promise<AcquiredAssetExecutionResult>;
+  emitProgress: (input: AcquiredAssetInput) => void;
+};
 
 type AcquiredAssetExecutorOptions = {
   request: SummarizeRequest;
@@ -133,7 +138,9 @@ async function executeResolvedAsset(
   return result;
 }
 
-export function createAcquiredAssetExecutor(options: AcquiredAssetExecutorOptions) {
+export function createAcquiredAssetExecutor(
+  options: AcquiredAssetExecutorOptions,
+): AcquiredAssetExecutor {
   const execute = async (input: ResolvedAssetInput): Promise<AcquiredAssetExecutionResult> => {
     const context = options.context;
     if (!context) {
