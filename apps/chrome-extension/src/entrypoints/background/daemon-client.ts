@@ -1,3 +1,5 @@
+import { getDaemonOrigin } from "../../lib/daemon-url";
+
 const DAEMON_STATUS_TIMEOUT_MS = 5000;
 const DAEMON_STATUS_RETRY_DELAY_MS = 400;
 const DAEMON_STATUS_MAX_ATTEMPTS = 2;
@@ -47,9 +49,11 @@ async function withDaemonRetry(
 }
 
 export async function daemonHealth(): Promise<{ ok: boolean; error?: string }> {
+  const origin = await getDaemonOrigin();
+
   return await withDaemonRetry(
     async (signal) => {
-      return await fetch("http://127.0.0.1:8787/health", { signal });
+      return await fetch(`${origin}/health`, { signal });
     },
     {
       timeout: "Timed out",
@@ -61,9 +65,11 @@ export async function daemonHealth(): Promise<{ ok: boolean; error?: string }> {
 }
 
 export async function daemonPing(token: string): Promise<{ ok: boolean; error?: string }> {
+  const origin = await getDaemonOrigin();
+
   return await withDaemonRetry(
     async (signal) => {
-      return await fetch("http://127.0.0.1:8787/v1/ping", {
+      return await fetch(`${origin}/v1/ping`, {
         headers: { Authorization: `Bearer ${token}` },
         signal,
       });
@@ -80,7 +86,10 @@ export async function daemonPing(token: string): Promise<{ ok: boolean; error?: 
 export function friendlyFetchError(err: unknown, context: string): string {
   const message = err instanceof Error ? err.message : String(err);
   if (message.toLowerCase() === "failed to fetch") {
-    return `${context}: Failed to fetch (daemon unreachable or blocked by Chrome; try \`summarize daemon status\` and check ~/.summarize/logs/daemon.err.log)`;
+    if (context.toLowerCase().includes("daemon")) {
+      return `${context}: Failed to fetch (daemon unreachable or blocked by Chrome; try \`summarize daemon status\` and check ~/.summarize/logs/daemon.err.log)`;
+    }
+    return `${context}: Failed to fetch (network request blocked, offline, or provider unavailable)`;
   }
   return `${context}: ${message}`;
 }

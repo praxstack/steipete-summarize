@@ -1,4 +1,7 @@
-import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
+import type {
+  AgentAssistantMessage as AssistantMessage,
+  AgentMessage as Message,
+} from "@steipete/summarize-core/runtime";
 
 export type AgentResponse = { ok: boolean; assistant?: AssistantMessage; error?: string };
 export type ChatHistoryResponse = { ok: boolean; messages?: Message[]; error?: string };

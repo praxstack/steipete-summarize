@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseSseStream } from "../apps/chrome-extension/src/lib/sse.js";
 import {
   encodeSseEvent,
   parseSseEvent,
+  parseSseStream,
   type SseEvent,
 } from "../packages/core/src/runtime/sse-events.js";
 
@@ -112,6 +112,47 @@ describe("sse events", () => {
   it("flushes a final SSE event at EOF with only a trailing newline", async () => {
     await expect(collectSse("event: done\ndata: {}\n")).resolves.toEqual([
       { event: "done", data: "{}" },
+    ]);
+  });
+
+  it("preserves significant whitespace in SSE data fields", async () => {
+    await expect(collectSse("event: chunk\ndata:  leading and trailing  \n\n")).resolves.toEqual([
+      { event: "chunk", data: " leading and trailing  " },
+    ]);
+  });
+
+  it("preserves trailing whitespace before joining multi-line SSE data", async () => {
+    await expect(collectSse("event: chunk\ndata: first  \ndata: second\n\n")).resolves.toEqual([
+      { event: "chunk", data: "first  \nsecond" },
+    ]);
+  });
+
+  it("treats colonless SSE data fields as empty values", async () => {
+    await expect(collectSse("event: chunk\ndata\ndata: x\n\n")).resolves.toEqual([
+      { event: "chunk", data: "\nx" },
+    ]);
+  });
+
+  it("parses CRLF events split across byte chunks", async () => {
+    const encoder = new TextEncoder();
+    const chunks = ["event: chu", "nk\r\ndata: hel", "lo\r\n\r\n"];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+        controller.close();
+      },
+    });
+    const events = [];
+    for await (const event of parseSseStream(stream)) events.push(event);
+    expect(events).toEqual([{ event: "chunk", data: "hello" }]);
+  });
+
+  it("surfaces comments without disturbing the pending event", async () => {
+    await expect(
+      collectSse("event: chunk\n: heartbeat\ndata: after heartbeat\n\n"),
+    ).resolves.toEqual([
+      { event: "__comment__", data: "heartbeat" },
+      { event: "chunk", data: "after heartbeat" },
     ]);
   });
 });

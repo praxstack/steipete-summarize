@@ -4,8 +4,8 @@ Browser extension for Chrome and Firefox that streams AI-powered summaries direc
 
 **Supported browsers**:
 
-- Chrome (Side Panel) - Auto-opens on toolbar icon click
-- Firefox 131+ (Sidebar) - Toggle with toolbar icon or `Ctrl+Shift+U`
+- Chrome 120+ (Side Panel) - Auto-opens on toolbar icon click
+- Firefox 140+ (Sidebar) - Toggle with toolbar icon or `Ctrl+Shift+U`
 
 Docs + setup: `https://summarize.sh`
 
@@ -57,22 +57,30 @@ Step-by-step:
 
 **Note**: Temporary add-ons are removed when Firefox restarts. For permanent installation, the extension needs to be signed via AMO (Firefox Add-ons).
 
-## Optional Daemon (Pairing)
+## AI and Media Runtimes
 
-Chrome Browser mode works without a CLI install or daemon. It can summarize pages, use MediaBunny with native WebCodecs for fetchable video slides up to 128 MB, and transcribe captionless YouTube videos with local multilingual Whisper. YouTube audio prefers a same-origin Android VR direct-media URL, with the active tab's captured SABR session as fallback. Chrome's native audio decoder is preferred; MediaBunny handles supported streams that WebAudio rejects. The Whisper model downloads on first use and is cached by Chrome; offline model bundling is not currently provided. Install the daemon for faster extraction, native tools, configurable transcription providers, OCR, and Firefox media support.
+The extension separates its AI connection from media/slide extraction:
+
+- **Direct**: works immediately with Auto using Chrome's built-in Gemini Nano Summarizer API and extractive fallback. A dismissible hint offers the optional daemon for faster media, OCR, and broader capabilities. Auto calls a configured OpenAI, OpenRouter, Anthropic, Gemini, xAI, Z.AI, NVIDIA, MiniMax, GitHub Models, Ollama, or overridden compatible endpoint directly from Chrome. Gemini Nano can also be selected explicitly. Provider-backed chat, automation, and hover summaries work without the daemon. Keys stay in `chrome.storage.local` and are sent only to the selected provider.
+- **Daemon**: uses the local Summarize daemon and its configured providers, CLI fallbacks, cache, and diagnostics. Explicitly selecting Gemini Nano still keeps summaries on-device while daemon-only capabilities remain available.
+
+Media/slides can independently use **Browser** or **Daemon**. Browser media uses MediaBunny with native WebCodecs for fetchable video slides up to 128 MB, summarizes each slide with Gemini Nano, and transcribes captionless YouTube videos with local multilingual Whisper. The AI models download on first use and are cached by Chrome. Daemon media adds native tools, configurable transcription providers, OCR, broader media support, and Firefox media support.
+
+## Optional Daemon (Pairing)
 
 1. Install `summarize` (choose one):
    - `npm i -g @steipete/summarize` (requires Node.js 24+)
    - `brew install summarize` (macOS, Linux)
-2. Open the Side Panel (Chrome) or Sidebar (Firefox). You'll see a **Setup** screen with a token and an install command.
+2. Switch the AI connection or media runtime to **Daemon**, then copy the pairing token and install command from the extension.
 3. Open Terminal:
    - macOS: Applications → Utilities → Terminal
    - Windows: Start menu → Terminal (or PowerShell) — **right-click → Run as administrator**
    - Linux: your Terminal app
 4. Paste the command from the Setup screen and press Enter.
-   - Installed binary: `summarize daemon install --token <TOKEN>`
-   - Repo/dev checkout: `pnpm summarize daemon install --token <TOKEN> --dev`
-5. Back in your browser, the Setup screen should disappear once the daemon is running.
+   - Installed binary: `summarize daemon install --token <TOKEN> --port 8787`
+   - Repo/dev checkout: `pnpm summarize daemon install --token <TOKEN> --port 8787 --dev`
+   - Non-default port: replace `8787`, then enter the same port under **Options → Runtime → Daemon → Port**.
+5. Back in your browser, the Daemon runtime setup screen should disappear once the daemon is running.
 6. Verify / troubleshoot:
    - `summarize daemon status`
    - `summarize daemon restart`

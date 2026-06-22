@@ -36,17 +36,17 @@ YouTube slide screenshots (from the browser):
 
 ### Beginner quickstart (extension)
 
-1. Install the CLI (choose one):
-   - **npm** (cross‑platform): `npm i -g @steipete/summarize`
+1. Install the extension (Chrome Web Store link above) and open the Side Panel.
+2. Choose **Direct** or **Daemon**. Direct uses Gemini Nano by default when no provider key is configured, or calls your selected provider from Chrome.
+3. Choose Browser media for daemonless transcription/slides. Optional: install the CLI and pair the daemon for native tools, CLI model fallbacks, OCR, and broader media support:
+   - **npm** (cross-platform): `npm i -g @steipete/summarize`
    - **Homebrew** (Homebrew/core): `brew install summarize`
-2. Install the extension (Chrome Web Store link above) and open the Side Panel.
-3. The panel shows a token + install command. Run it in Terminal:
-   - `summarize daemon install --token <TOKEN>`
+   - `summarize daemon install --token <TOKEN> --port 8787`
 
 Why a daemon/service?
 
-- Browser mode works without the daemon for page summaries, ranged video slides through MediaBunny/WebCodecs, and fetchable YouTube/direct/embedded media transcription with browser-cached Whisper.
-- The optional daemon on `127.0.0.1` is faster and adds native ffmpeg, configurable transcription providers, OCR, and broader media support.
+- Direct mode works without the daemon. Auto uses a configured OpenAI, OpenRouter, Anthropic, Gemini, xAI, Z.AI, NVIDIA, MiniMax, GitHub Models, or Ollama provider, otherwise Gemini Nano on-device; keys remain in extension-local storage.
+- The optional daemon on `127.0.0.1` adds CLI model fallbacks, shared caches/diagnostics, native ffmpeg, configurable transcription providers, OCR, and broader media support.
 - The service autostarts (launchd/systemd/Scheduled Task) so the Side Panel is always ready.
 
 If you only want the **CLI**, you can skip the daemon install entirely.
@@ -56,8 +56,9 @@ Notes:
 - Summarization only runs when the Side Panel is open.
 - Auto mode summarizes on navigation (incl. SPAs); otherwise use the button.
 - Daemon is localhost-only and requires a shared token; rerunning `summarize daemon install --token <TOKEN>` adds another paired browser token instead of invalidating the old one.
+- Non-default port: install with `summarize daemon install --token <TOKEN> --port <PORT>`, then set the same value in **Options → Runtime → Daemon → Port**.
 - Autostart: macOS (launchd), Linux (systemd user), Windows (Scheduled Task).
-- Windows containers: `summarize daemon install` starts the daemon for the current container session but does not register a Scheduled Task. Run it each time the container starts or add that command to your container startup, and publish port `8787` so the host browser can reach the daemon.
+- Windows containers: `summarize daemon install` starts the daemon for the current container session but does not register a Scheduled Task. Run it each time the container starts or add that command to your container startup, publish the configured port (default `8787`), and set the same port in the extension.
 - Tip: configure `free` via `summarize refresh-free` (needs `OPENROUTER_API_KEY`). Add `--set-default` to set model=`free`.
 
 More:
@@ -153,7 +154,7 @@ If native `ffmpeg`/`ffprobe` are unavailable, Summarize uses the bundled WebAsse
 ### CLI vs extension
 
 - **CLI only:** just install via npm/Homebrew and run `summarize ...` (no daemon needed).
-- **Chrome extension:** Browser mode works without the CLI or daemon; install the daemon for faster and broader media support.
+- **Chrome extension:** Direct mode defaults to Gemini Nano without a key and supports provider-backed summaries/chat/automation/hover when configured; Browser media provides daemonless transcription and slides. Install the daemon for CLI fallbacks and native media tools.
 - **Firefox extension:** install the CLI and daemon for media extraction.
 
 ### Quickstart
@@ -254,7 +255,7 @@ summarize "https://example.com" --length 20k
   - Prefer `--length` unless you need a hard cap.
 - Short content: when extracted content is shorter than the requested length, the CLI returns the content as-is.
   - Override with `--force-summary` to always run the LLM.
-- Minimums: `--length` numeric values must be >= 50 chars; `--max-output-tokens` must be >= 16.
+- Minimums: `--length` numeric values must be >= 10 chars; `--max-output-tokens` must be >= 16.
 - Preset targets (source of truth: `packages/core/src/prompts/summary-lengths.ts`):
   - short: target ~900 chars (range 600-1,200)
   - medium: target ~1,800 chars (range 1,200-2,500)
@@ -347,7 +348,7 @@ Use `summarize --help` or `summarize help` for the full help text.
 - `--model auto`: automatic model selection + fallback (default)
 - `--model <name>`: use a built-in or config-defined preset (see Configuration)
 - `--timeout <duration>`: `30s`, `2m`, `5000ms` (default `2m`)
-- `--retries <count>`: LLM retry attempts on timeout (default `1`)
+- `--retries <count>`: LLM retry attempts after timeouts or transient API failures (default `1`)
 - `--length short|medium|long|xl|xxl|s|m|l|<chars>`
 - `--language, --lang <language>`: output language (`auto` = match source)
 - `--max-output-tokens <count>`: hard cap for LLM output tokens
@@ -861,6 +862,7 @@ pnpm check
   - Reload the tab once.
 - "Failed to fetch" / daemon unreachable:
   - `summarize daemon status`
+  - For a non-default port, confirm **Options → Runtime → Daemon → Port** matches the daemon configuration.
   - Logs: `~/.summarize/logs/daemon.err.log`
 
 License: MIT

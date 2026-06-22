@@ -1,3 +1,5 @@
+import { getDaemonOrigin } from "../../lib/daemon-url";
+
 export function createModelPresetsController({
   presetEl,
   customEl,
@@ -15,6 +17,10 @@ export function createModelPresetsController({
     auto.value = "auto";
     auto.textContent = "Auto";
     presetEl.append(auto);
+    const geminiNano = document.createElement("option");
+    geminiNano.value = "browser/gemini-nano";
+    geminiNano.textContent = "Gemini Nano (on-device)";
+    presetEl.append(geminiNano);
     const gptFast = document.createElement("option");
     gptFast.value = "gpt-fast";
     gptFast.textContent = "GPT Fast";
@@ -114,7 +120,8 @@ export function createModelPresetsController({
       return;
     }
     try {
-      const res = await fetchImpl("http://127.0.0.1:8787/v1/models", {
+      const origin = await getDaemonOrigin();
+      const res = await fetchImpl(`${origin}/v1/models`, {
         headers: { Authorization: `Bearer ${trimmed}` },
       });
       if (!isCurrentRequest()) return;

@@ -21,6 +21,7 @@ export {
   type SourceMetrics,
 } from "./link-preview/content/types.js";
 export { applyContentBudget } from "./link-preview/content/cleaner.js";
+export { extractBrowserHtmlContent, type BrowserHtmlContent } from "./browser-html.js";
 export {
   AssetLikeHtmlFetchError,
   isAssetLikeHtmlFetchError,
@@ -67,6 +68,10 @@ export {
   type TranscriptSource,
 } from "./link-preview/types.js";
 export { formatTimestampMs, parseTimestampStringToMs } from "./transcript/timestamps.js";
+export {
+  resolveTranscriptionAvailability,
+  type TranscriptionAvailability,
+} from "./transcript/providers/transcription-start.js";
 export {
   buildYoutubeCaptionTrackUrls,
   formatYoutubeCaptionLines,

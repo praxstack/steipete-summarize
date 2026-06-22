@@ -28,7 +28,12 @@ const {
   formEl,
   statusEl,
   tokenEl,
+  daemonPortEl,
   tokenCopyBtn,
+  summaryRuntimeModeRoot,
+  providerEl,
+  providerApiKeyEl,
+  providerBaseUrlEl,
   modelPresetEl,
   modelCustomEl,
   languagePresetEl,
@@ -217,6 +222,10 @@ let booleanSettings: ReturnType<typeof createBooleanSettingsRuntime> | null = nu
 let refreshRuntimeStatus = (_token = tokenEl.value) => {};
 const settingsElements = {
   tokenEl,
+  daemonPortEl,
+  providerEl,
+  providerApiKeyEl,
+  providerBaseUrlEl,
   languagePresetEl,
   languageCustomEl,
   promptOverrideEl,
@@ -256,6 +265,7 @@ const { saveNow, scheduleAutoSave } = createOptionsSaveRuntime({
           summaryTimestamps: defaultSettings.summaryTimestamps,
           slidesParallel: defaultSettings.slidesParallel,
           slideRuntime: defaultSettings.slideRuntime,
+          summaryRuntime: defaultSettings.summaryRuntime,
           slidesOcrEnabled: defaultSettings.slidesOcrEnabled,
           extendedLogging: defaultSettings.extendedLogging,
           autoCliFallback: defaultSettings.autoCliFallback,
@@ -277,6 +287,7 @@ booleanSettings = createBooleanSettingsRuntime({
     summaryTimestampsToggleRoot,
     slidesParallelToggleRoot,
     slideRuntimeModeRoot,
+    summaryRuntimeModeRoot,
     slidesOcrToggleRoot,
     extendedLoggingToggleRoot,
     autoCliFallbackToggleRoot,
@@ -285,7 +296,7 @@ booleanSettings = createBooleanSettingsRuntime({
   onAutomationChanged: () => {
     void automationPermissions.updateUi();
   },
-  onDaemonSlidesModeChanged: () => {
+  onRuntimeChanged: () => {
     refreshRuntimeStatus();
   },
 });
@@ -299,7 +310,10 @@ const resolveExtensionVersion = () => {
 const { checkDaemonStatus } = createDaemonStatusChecker({
   statusEl: daemonStatusEl,
   getExtensionVersion: resolveExtensionVersion,
-  isDaemonMode: () => (booleanSettings?.getState().slideRuntime ?? "browser") === "daemon",
+  isDaemonMode: () => {
+    const state = booleanSettings?.getState();
+    return state?.summaryRuntime === "daemon" || state?.slideRuntime === "daemon";
+  },
 });
 
 refreshRuntimeStatus = (token = tokenEl.value) => {
@@ -378,6 +392,7 @@ const modelPresets = createModelPresetsController({
 
 let currentScheme: ColorScheme = defaultSettings.colorScheme;
 let currentMode: ColorMode = defaultSettings.colorMode;
+let activeProvider = defaultSettings.provider;
 
 const pickerHandlers = {
   onSchemeChange: (value: ColorScheme) => {
@@ -411,6 +426,7 @@ automationPermissionsBtn.addEventListener("click", () => {
 
 async function load() {
   const s = await loadSettings();
+  activeProvider = s.provider;
   await modelPresets.refreshPresets(s.token);
   modelPresets.setValue(s.model);
   const loadedState = applyLoadedOptionsSettings({
@@ -437,6 +453,32 @@ async function load() {
   isInitializing = false;
 }
 
+providerEl.addEventListener("change", () => {
+  void (async () => {
+    const stored = await loadSettings();
+    await saveSettings({
+      ...stored,
+      providerApiKeys: {
+        ...stored.providerApiKeys,
+        [activeProvider]: providerApiKeyEl.value.trim(),
+      },
+      providerBaseUrls: {
+        ...stored.providerBaseUrls,
+        [activeProvider]: providerBaseUrlEl.value.trim(),
+      },
+    });
+    const nextProvider = providerEl.value as typeof activeProvider;
+    activeProvider = nextProvider;
+    const refreshed = await loadSettings();
+    providerApiKeyEl.value = refreshed.providerApiKeys[nextProvider] ?? "";
+    providerBaseUrlEl.value = refreshed.providerBaseUrls[nextProvider] ?? "";
+    scheduleAutoSave(0);
+  })();
+});
+
+providerApiKeyEl.addEventListener("input", () => scheduleAutoSave(400));
+providerBaseUrlEl.addEventListener("input", () => scheduleAutoSave(400));
+
 const copyToken = () => copyTokenToClipboard({ tokenEl, flashStatus });
 
 const refreshModelsIfStale = () => {
@@ -447,6 +489,7 @@ bindOptionsInputs({
   elements: {
     formEl,
     tokenEl,
+    daemonPortEl,
     tokenCopyBtn,
     modelPresetEl,
     modelCustomEl,

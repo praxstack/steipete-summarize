@@ -34,7 +34,13 @@ test("sidepanel chat queue sends next message after stream completes", async ({
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
 
   try {
-    await seedSettings(harness, { token: "test-token", autoSummarize: false, chatEnabled: true });
+    await mockDaemonSummarize(harness);
+    await seedSettings(harness, {
+      token: "test-token",
+      summaryRuntime: "daemon",
+      autoSummarize: false,
+      chatEnabled: true,
+    });
     const contentPage = await harness.context.newPage();
     await contentPage.goto("https://example.com", { waitUntil: "domcontentloaded" });
     await contentPage.evaluate(() => {
@@ -101,8 +107,10 @@ test("sidepanel chat sends mixed OCR and transcript slide text to the bot", asyn
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
 
   try {
+    await mockDaemonSummarize(harness);
     await seedSettings(harness, {
       token: "test-token",
+      summaryRuntime: "daemon",
       autoSummarize: false,
       chatEnabled: true,
       slidesOcrEnabled: true,
@@ -198,7 +206,13 @@ test("sidepanel chat queue drains messages after stream completes", async ({
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
 
   try {
-    await seedSettings(harness, { token: "test-token", autoSummarize: false, chatEnabled: true });
+    await mockDaemonSummarize(harness);
+    await seedSettings(harness, {
+      token: "test-token",
+      summaryRuntime: "daemon",
+      autoSummarize: false,
+      chatEnabled: true,
+    });
     const contentPage = await harness.context.newPage();
     await contentPage.goto("https://example.com", { waitUntil: "domcontentloaded" });
     await contentPage.evaluate(() => {
@@ -284,7 +298,13 @@ test("sidepanel clears chat on user navigation", async ({
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
 
   try {
-    await seedSettings(harness, { token: "test-token", autoSummarize: false, chatEnabled: true });
+    await mockDaemonSummarize(harness);
+    await seedSettings(harness, {
+      token: "test-token",
+      summaryRuntime: "daemon",
+      autoSummarize: false,
+      chatEnabled: true,
+    });
     const contentPage = await harness.context.newPage();
     await contentPage.goto("https://example.com", { waitUntil: "domcontentloaded" });
     await contentPage.evaluate(() => {
@@ -309,7 +329,11 @@ test("sidepanel clears chat on user navigation", async ({
       type: "ui:state",
       state: buildUiState({
         tab: { id: 1, url: "https://example.com", title: "Example" },
-        settings: { chatEnabled: true, tokenPresent: true },
+        settings: {
+          chatEnabled: true,
+          summaryRuntime: "daemon",
+          tokenPresent: true,
+        },
       }),
     });
 
@@ -328,7 +352,11 @@ test("sidepanel clears chat on user navigation", async ({
       type: "ui:state",
       state: buildUiState({
         tab: { id: 1, url: "https://example.com/next", title: "Next" },
-        settings: { chatEnabled: true, tokenPresent: true },
+        settings: {
+          chatEnabled: true,
+          summaryRuntime: "daemon",
+          tokenPresent: true,
+        },
       }),
     });
 
@@ -480,7 +508,11 @@ test("hover tooltip proxies daemon calls via background (no page-origin localhos
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
 
   try {
-    await seedSettings(harness, { token: "test-token", hoverSummaries: true });
+    await seedSettings(harness, {
+      token: "test-token",
+      hoverSummaries: true,
+      summaryRuntime: "daemon",
+    });
     await mockDaemonSummarize(harness);
 
     let eventsCalls = 0;

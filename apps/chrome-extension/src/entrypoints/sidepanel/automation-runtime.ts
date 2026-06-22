@@ -1,8 +1,13 @@
-import type { Message, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type {
+  AgentMessage as Message,
+  AgentToolCall as ToolCall,
+  AgentToolResultMessage as ToolResultMessage,
+} from "@steipete/summarize-core/runtime";
 import { executeToolCall, getAutomationToolNames } from "../../automation/tools";
 import { runChatAgentLoop } from "./chat-agent-loop";
 import type { ChatController } from "./chat-controller";
 import { buildEmptyUsage } from "./chat-history-store";
+import { isPanelAutomationAvailable } from "./panel-capabilities";
 import { applyPanelStateAction, type PanelStateAction } from "./panel-state-store";
 import type { ChatMessage, PanelState } from "./types";
 
@@ -182,7 +187,7 @@ export function createAutomationRuntime({
 
   const runAgentLoop = async () => {
     await runChatAgentLoop({
-      automationEnabled: panelState.panelSession.automationEnabled,
+      automationEnabled: isPanelAutomationAvailable(panelState),
       chatController,
       chatSession: getChatSession(),
       confirmToolCall,

@@ -152,7 +152,11 @@ export function buildProgram() {
       "Timeout for content fetching and LLM request: 30 (seconds), 30s, 2m, 5000ms",
       "2m",
     )
-    .option("--retries <count>", "LLM retry attempts on timeout (default: 1).", "1")
+    .option(
+      "--retries <count>",
+      "LLM retry attempts after timeouts or transient API failures (default: 1).",
+      "1",
+    )
     .option(
       "--model <model>",
       "LLM model id: auto, <name>, cli/<provider>/<model>, xai/..., openai/..., nvidia/..., minimax/..., google/..., anthropic/..., zai/... or openrouter/<author>/<slug> (default: auto)",
@@ -428,9 +432,10 @@ export function buildDaemonHelp(): string {
     "  Windows: Scheduled Task",
     "",
     "Options:",
-    "  --dev            Install service that runs src/cli.ts via tsx (repo dev mode)",
+    "  --dev            Install service that runs src/cli.ts via Node (repo dev mode)",
     "  --port <n>       (default: 8787)",
     "  --token <token>  (required for install)",
+    "  Custom ports must also be set in Extension Options → Runtime → Daemon → Port.",
   ].join("\n");
 }
 

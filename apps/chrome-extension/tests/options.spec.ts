@@ -176,34 +176,50 @@ test("options persists automation toggle without save", async ({
   }
 });
 
-test("options exposes runtime slide backend radios", async ({
+test("options exposes two AI connections and independent slide runtimes", async ({
   browserName: _browserName,
 }, testInfo) => {
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
 
   try {
-    await seedSettings(harness, { slideRuntime: "browser" });
+    await seedSettings(harness, { summaryRuntime: "direct", slideRuntime: "browser" });
     const page = await openExtensionPage(harness, "options.html", "#tabs");
 
-    await expect(page.locator("#daemonStatus")).toContainText("Browser mode active");
+    await expect(page.locator("#daemonStatus")).toContainText("Daemon not selected");
     await expect(page.locator("#panel-general")).not.toContainText("Token");
 
     await page.click("#tab-runtime");
     await expect(page.locator("#panel-runtime")).toBeVisible();
-    await expect(page.locator("#panel-runtime")).toContainText("Browser");
+    await expect(page.locator("#panel-runtime")).toContainText("Direct");
     await expect(page.locator("#panel-runtime")).toContainText("Daemon");
+    await expect(page.locator("#summaryRuntimeMode .runtimeModeCard")).toHaveCount(2);
+    await expect(page.locator("#panel-runtime")).not.toContainText("On-device");
+    await page.click("#tab-advanced");
+    await expect(page.locator("#modelPreset")).toContainText("Gemini Nano (on-device)");
+    await page.click("#tab-runtime");
     await expect(page.locator("#panel-runtime")).toContainText("Browser cache");
-    await expect(page.locator("#panel-runtime")).toContainText("Daemon token");
+    await expect(page.locator("#panel-runtime #daemonPort")).toBeVisible();
+    await expect(page.locator("#panel-runtime #token")).toBeVisible();
     await expect(page.locator("#panel-runtime")).not.toContainText("Show summary first");
     await expect(page.locator("#browserCacheStatus")).toContainText(/entries? · /);
     await page.locator("#browserCacheClear").click();
     await expect(page.locator("#browserCacheStatus")).toContainText("0 entries");
 
-    const mode = page.locator("#slideRuntimeMode");
-    await expect(mode.locator('input[value="browser"]')).toBeChecked();
-    await mode.locator('input[value="daemon"]').click();
+    const aiMode = page.locator("#summaryRuntimeMode");
+    await expect(aiMode.locator('input[value="direct"]')).toBeChecked();
+    await aiMode.locator('input[value="daemon"]').click();
     await expect(page.locator("#daemonStatus")).toContainText("Add token to verify daemon");
 
+    await expect
+      .poll(async () => {
+        const settings = await getSettings(harness);
+        return settings.summaryRuntime;
+      })
+      .toBe("daemon");
+
+    const slideMode = page.locator("#slideRuntimeMode");
+    await expect(slideMode.locator('input[value="browser"]')).toBeChecked();
+    await slideMode.locator('input[value="daemon"]').click();
     await expect
       .poll(async () => {
         const settings = await getSettings(harness);
@@ -252,6 +268,42 @@ test("options disables automation permissions button when granted", async ({
       "Automation permissions granted",
     );
     await expect(page.locator("#userScriptsNotice")).toBeHidden();
+    assertNoErrors(harness);
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir);
+  }
+});
+
+test("options persists direct provider credentials per provider", async ({
+  browserName: _browserName,
+}, testInfo) => {
+  const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
+
+  try {
+    await seedSettings(harness, {
+      summaryRuntime: "direct",
+      provider: "openai",
+      providerApiKeys: { openai: "openai-key" },
+      providerBaseUrls: {},
+    });
+    const page = await openExtensionPage(harness, "options.html", "#tabs");
+    await page.click("#tab-runtime");
+    await expect(page.locator("#provider")).toHaveValue("openai");
+    await expect(page.locator("#providerApiKey")).toHaveValue("openai-key");
+
+    await page.locator("#provider").selectOption("anthropic");
+    await page.locator("#providerApiKey").fill("anthropic-key");
+    await page.locator("#providerBaseUrl").fill("https://anthropic.test");
+
+    await expect
+      .poll(async () => {
+        const settings = await getSettings(harness);
+        return (settings.providerApiKeys as Record<string, string> | undefined)?.anthropic;
+      })
+      .toBe("anthropic-key");
+
+    await page.locator("#provider").selectOption("openai");
+    await expect(page.locator("#providerApiKey")).toHaveValue("openai-key");
     assertNoErrors(harness);
   } finally {
     await closeExtension(harness.context, harness.userDataDir);
@@ -331,6 +383,30 @@ test("options footer links to summarize site", async ({ browserName: _browserNam
     const page = await openExtensionPage(harness, "options.html", "#tabs");
     const summarizeLink = page.locator(".pageFooter a", { hasText: "Summarize" });
     await expect(summarizeLink).toHaveAttribute("href", /summarize\.sh/);
+    assertNoErrors(harness);
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir);
+  }
+});
+
+test("options persists a custom daemon port", async ({ browserName: _browserName }, testInfo) => {
+  const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
+
+  try {
+    await seedSettings(harness, { daemonPort: "9931" });
+    const page = await openExtensionPage(harness, "options.html", "#tabs");
+    await page.click("#tab-runtime");
+    await expect(page.locator("#daemonPort")).toHaveValue("9931");
+    await page.locator("#daemonPort").fill("8788");
+    await expect
+      .poll(async () => {
+        const settings = await getSettings(harness);
+        return settings.daemonPort;
+      })
+      .toBe("8788");
+    await page.locator("#daemonPort").fill("65536");
+    await expect(page.locator("#daemonPort")).toHaveValue("8787");
+    await expect.poll(async () => (await getSettings(harness)).daemonPort).toBe("8787");
     assertNoErrors(harness);
   } finally {
     await closeExtension(harness.context, harness.userDataDir);

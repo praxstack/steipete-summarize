@@ -1,10 +1,14 @@
 import { readPresetOrCustomValue, resolvePresetOrCustom } from "../../lib/combo";
-import type { Settings, SlideRuntime } from "../../lib/settings";
+import type { DirectProvider, Settings, SlideRuntime, SummaryRuntime } from "../../lib/settings";
 import type { ColorMode, ColorScheme } from "../../lib/theme";
 import type { createModelPresetsController } from "./model-presets";
 
 type FormElements = {
   tokenEl: HTMLInputElement;
+  daemonPortEl: HTMLInputElement;
+  providerEl: HTMLSelectElement;
+  providerApiKeyEl: HTMLInputElement;
+  providerBaseUrlEl: HTMLInputElement;
   languagePresetEl: HTMLSelectElement;
   languageCustomEl: HTMLInputElement;
   promptOverrideEl: HTMLTextAreaElement;
@@ -31,6 +35,7 @@ type BooleanFormState = {
   automationEnabled: boolean;
   slidesParallel: boolean;
   slideRuntime: SlideRuntime;
+  summaryRuntime: SummaryRuntime;
   slidesOcrEnabled: boolean;
   summaryTimestamps: boolean;
   extendedLogging: boolean;
@@ -56,6 +61,17 @@ export function buildSavedOptionsSettings({
 }): Settings {
   return {
     token: elements.tokenEl.value || defaults.token,
+    daemonPort: elements.daemonPortEl.value || defaults.daemonPort,
+    summaryRuntime: booleans.summaryRuntime,
+    provider: elements.providerEl.value as DirectProvider,
+    providerApiKeys: {
+      ...current.providerApiKeys,
+      [elements.providerEl.value]: elements.providerApiKeyEl.value.trim(),
+    },
+    providerBaseUrls: {
+      ...current.providerBaseUrls,
+      [elements.providerEl.value]: elements.providerBaseUrlEl.value.trim(),
+    },
     model: modelPresets.readCurrentValue(),
     length: current.length,
     language: readPresetOrCustomValue({
@@ -113,6 +129,10 @@ export function applyLoadedOptionsSettings({
   elements: FormElements;
 }) {
   elements.tokenEl.value = settings.token;
+  elements.daemonPortEl.value = settings.daemonPort;
+  elements.providerEl.value = settings.provider;
+  elements.providerApiKeyEl.value = settings.providerApiKeys[settings.provider] ?? "";
+  elements.providerBaseUrlEl.value = settings.providerBaseUrls[settings.provider] ?? "";
   {
     const resolved = resolvePresetOrCustom({
       value: settings.language,
@@ -146,6 +166,7 @@ export function applyLoadedOptionsSettings({
       automationEnabled: settings.automationEnabled,
       slidesParallel: settings.slidesParallel,
       slideRuntime: settings.slideRuntime,
+      summaryRuntime: settings.summaryRuntime,
       slidesOcrEnabled: settings.slidesOcrEnabled,
       summaryTimestamps: settings.summaryTimestamps,
       extendedLogging: settings.extendedLogging,

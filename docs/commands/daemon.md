@@ -70,13 +70,13 @@ summarize daemon run --port 8787
 ## Options
 
 `--port <n>`
-: TCP port. Default `8787`. The Side Panel reads it from `~/.summarize/daemon.json`.
+: TCP port. Default `8787`. For a non-default port, set the same value in the extension under **Options → Runtime → Daemon → Port**; browser extensions cannot read `~/.summarize/daemon.json`.
 
 `--token <token>`
 : Bearer token. Required for `install`. Stored in `~/.summarize/daemon.json` (mode `0600`).
 
 `--dev`
-: Install a service that runs `src/cli.ts` via `tsx` from the current repo. Useful while hacking on the daemon — don't ship it to users.
+: Install a service that runs `src/cli.ts` via Node's native TypeScript support from the current repo. Useful while hacking on the daemon — don't ship it to users.
 
 ## HTTP endpoints
 
@@ -96,9 +96,9 @@ The daemon is documented in detail in [Chrome extension](../chrome-extension.md)
 
 ## Notes
 
-- **Containers** — `install` starts the daemon for the current container session but does not register a Scheduled Task / unit. Run `summarize daemon run` from your entrypoint instead, and publish port `8787` so the host browser can reach it.
+- **Containers** — `install` starts the daemon for the current container session but does not register a Scheduled Task / unit. Run `summarize daemon run` from your entrypoint instead, publish the configured port (default `8787`), and set the same port in the extension.
 - **Token rotation** — running `install --token <NEW>` adds a new paired browser; old browsers keep working. Edit `daemon.json` by hand to revoke.
-- **Multiple installs** — only one daemon per user. Reinstall to upgrade.
+- **Multiple installs** — only one daemon per user. Reinstall to upgrade; omitting `--port` preserves the configured port.
 
 ## See also
 

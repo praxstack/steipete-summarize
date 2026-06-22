@@ -41,6 +41,7 @@ describe("sidepanel state effects runtime", () => {
     const startSlidesSummaryStreamForRunId = vi.fn();
     const setSlidesLayout = vi.fn();
     const applyPanelCache = vi.fn();
+    const updateDaemonHint = vi.fn();
     const renderMarkdownHostEl = {} as HTMLElement;
     const runtime = createSidepanelStateEffectsRuntime({
       dom: {
@@ -146,6 +147,9 @@ describe("sidepanel state effects runtime", () => {
       } as unknown as Parameters<
         typeof createSidepanelStateEffectsRuntime
       >[0]["setupControlsRuntime"],
+      daemonHintRuntime: {
+        update: updateDaemonHint,
+      },
     });
     const state = { panelOpen: true } as Parameters<typeof runtime.applyUiState>[0];
     const message = { type: "ui:status", status: "Ready" } as const;
@@ -160,6 +164,7 @@ describe("sidepanel state effects runtime", () => {
     bgMessageOptions?.startSlidesSummaryStreamForRunId("run-1", undefined);
 
     expect(applyUiState).toHaveBeenCalledWith(state);
+    expect(uiStateOptions?.updateDaemonHint).toBe(updateDaemonHint);
     expect(handleBgMessage).toHaveBeenCalledWith(message);
     expect(send).toHaveBeenCalledWith({ type: "panel:slides-capture" });
     expect(setSlidesLayout).toHaveBeenCalledWith("gallery");

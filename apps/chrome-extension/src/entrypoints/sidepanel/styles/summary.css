@@ -1,3 +1,44 @@
+.daemonHint {
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border-radius: 10px;
+  padding: 7px 8px 7px 10px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.daemonHint__message {
+  flex: 1;
+  min-width: 0;
+}
+
+.daemonHint__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.daemonHint__close {
+  width: 26px;
+  height: 26px;
+  padding: 5px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.daemonHint__close svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
 .setup {
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   background: var(--surface);

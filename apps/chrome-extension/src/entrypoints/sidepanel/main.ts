@@ -4,9 +4,11 @@ import { generateToken } from "../../lib/token";
 import { createAppearanceControls } from "./appearance-controls";
 import { bindSidepanelUiEvents } from "./bindings";
 import { bootstrapSidepanel } from "./bootstrap-runtime";
+import { createDaemonHintRuntime } from "./daemon-hint-runtime";
 import { createSidepanelDom } from "./dom";
 import { createSidepanelInteractionRuntime } from "./interaction-runtime";
 import { createMetricsController } from "./metrics-controller";
+import { isPanelChatAvailable } from "./panel-capabilities";
 import { createPanelMessagingRuntime } from "./panel-messaging";
 import { createPanelStateStore } from "./panel-state-store";
 import { createSidepanelPresentationRuntime } from "./presentation-runtime";
@@ -84,6 +86,16 @@ const panelMessagingRuntime = createPanelMessagingRuntime({
 const { resolveLocalSlides, send } = panelMessagingRuntime;
 
 const LINE_HEIGHT_STEP = 0.1;
+
+const daemonHintRuntime = createDaemonHintRuntime({
+  hintEl: dom.daemonHintEl,
+  actionBtn: dom.daemonHintActionBtn,
+  closeBtn: dom.daemonHintCloseBtn,
+  patchSettings,
+  openOptions: () => {
+    void send({ type: "panel:openOptions" });
+  },
+});
 
 const appearanceControls = createAppearanceControls({
   autoToggleRoot,
@@ -195,6 +207,7 @@ const stateEffectsRuntime = createSidepanelStateEffectsRuntime({
   runRuntime,
   sessionRuntime,
   setupControlsRuntime,
+  daemonHintRuntime,
 });
 
 function handleBgMessage(msg: BgToPanel) {
@@ -211,7 +224,7 @@ registerSidepanelRuntimeTestHooks({
 });
 
 const interactionRuntime = createSidepanelInteractionRuntime({
-  chatEnabled: () => getPanelSession().chatEnabled,
+  chatEnabled: () => isPanelChatAvailable(panelState),
   getRawChatInput: () => chatInputEl.value,
   clearChatInput: () => {
     chatInputEl.value = "";

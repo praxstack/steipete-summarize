@@ -1,11 +1,13 @@
 import { isYouTubeVideoUrl, shouldPreferUrlMode } from "@steipete/summarize-core/content/url";
 import type { PanelCachePayload } from "./panel-cache";
+import { isPanelChatAvailable } from "./panel-capabilities";
 import { applyPanelStateAction, type PanelStateAction } from "./panel-state-store";
 import {
   resolvePanelNavigationDecision,
   shouldIgnoreTransientPanelTabState,
   shouldInvalidateCurrentSource,
 } from "./session-policy";
+import type { SetupDisplay } from "./setup-runtime";
 import type { PanelPhase, PanelState, UiState } from "./types";
 
 type AppearanceControlsLike = {
@@ -72,7 +74,8 @@ type UiStateRuntimeOpts = {
   setSlidesLayout: (value: string) => void;
   maybeSeedPlannedSlidesForPendingRun: () => void;
   refreshSummarizeControl: () => void;
-  maybeShowSetup: (state: UiState) => boolean;
+  updateDaemonHint: (state: UiState) => void;
+  maybeShowSetup: (state: UiState) => SetupDisplay;
   setPhase: (phase: PanelPhase, opts?: { error?: string | null }) => void;
   renderMarkdownDisplay: () => void;
   readCurrentModelValue: () => string;
@@ -152,7 +155,7 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
     const currentSource = opts.panelState.currentSource;
     const inputModeOverride = opts.panelState.slidesSession.inputModeOverride;
     const mediaAvailable = opts.panelState.slidesSession.mediaAvailable;
-    const chatEnabledValue = opts.panelState.panelSession.chatEnabled;
+    const chatEnabledValue = state.settings.chatEnabled;
     const slidesLayoutValue = opts.panelState.slidesSession.slidesLayout;
 
     const ignoreTransientTabState = shouldIgnoreTransientPanelTabState({
@@ -257,6 +260,9 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
       value: {
         chatEnabled: state.settings.chatEnabled,
         automationEnabled: state.settings.automationEnabled,
+        daemonFeaturesAvailable:
+          (state.settings.summaryRuntime === "direct" && state.settings.providerConfigured) ||
+          (state.settings.summaryRuntime === "daemon" && state.daemon.ok && state.daemon.authed),
       },
     });
     const nextSlidesOcrEnabled = Boolean(state.settings.slidesOcrEnabled);
@@ -313,7 +319,7 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
     }
     opts.applyChatEnabled();
     if (
-      opts.panelState.panelSession.chatEnabled &&
+      isPanelChatAvailable(opts.panelState) &&
       opts.panelState.navigation.activeTabId &&
       !shouldPreferUrlMode(nextTabUrl ?? "") &&
       opts.panelState.chat.messages.length === 0
@@ -406,10 +412,11 @@ export function createUiStateRuntime(opts: UiStateRuntimeOpts) {
     });
     opts.maybeSeedPlannedSlidesForPendingRun();
     opts.refreshSummarizeControl();
-    const showingSetup = opts.maybeShowSetup(state);
-    if (showingSetup && opts.panelState.phase !== "setup") {
+    opts.updateDaemonHint(state);
+    const setupDisplay = opts.maybeShowSetup(state);
+    if (setupDisplay === "blocking" && opts.panelState.phase !== "setup") {
       opts.setPhase("setup");
-    } else if (!showingSetup && opts.panelState.phase === "setup") {
+    } else if (setupDisplay !== "blocking" && opts.panelState.phase === "setup") {
       opts.setPhase("idle");
     }
     if (!opts.panelState.summaryMarkdown?.trim()) {

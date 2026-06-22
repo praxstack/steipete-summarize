@@ -1,6 +1,10 @@
-import type { AssistantMessage, Tool } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Model, Tool } from "@earendil-works/pi-ai";
 import { completeSimple, streamSimple } from "@earendil-works/pi-ai";
 import { buildPromptHash } from "../cache.js";
+import {
+  resolveGitHubModelsCompatFallbackModelId,
+  shouldRetryGitHubModelsCompat,
+} from "../llm/github-models.js";
 import { enableMinimaxReasoningSplit } from "../llm/providers/minimax.js";
 import { resolveAgentModel, resolveApiKeyForModel } from "./agent-model.js";
 import {
@@ -17,6 +21,26 @@ export function buildAgentPromptHash(automationEnabled: boolean): string {
 
 function resolveProviderPayloadOptions(provider: string) {
   return provider === "minimax" ? { onPayload: enableMinimaxReasoningSplit } : {};
+}
+
+function resolveAgentCompatFallbackModel({
+  provider,
+  model,
+  error,
+}: {
+  provider: string;
+  model: Model<Api>;
+  error: unknown;
+}): Model<Api> | null {
+  if (provider !== "github-copilot" || !shouldRetryGitHubModelsCompat(error)) return null;
+  const fallbackId = resolveGitHubModelsCompatFallbackModelId(model.id);
+  if (!fallbackId) return null;
+  return { ...model, id: fallbackId, name: fallbackId };
+}
+
+function assertAgentAssistantSucceeded(assistant: AssistantMessage): AssistantMessage {
+  if (assistant.stopReason !== "error" && assistant.stopReason !== "aborted") return assistant;
+  throw new Error(assistant.errorMessage || `Agent stopped with reason: ${assistant.stopReason}`);
 }
 
 const TOOL_DEFINITIONS: Record<string, Tool> = {
@@ -325,6 +349,7 @@ export async function streamAgentResponse({
         timeoutMs: 120_000,
         env,
         config: resolved.cliConfig,
+        signal,
       }),
     );
     onChunk(result.text);
@@ -335,43 +360,51 @@ export async function streamAgentResponse({
   const { provider, model, maxOutputTokens, apiKeys } = resolved;
   const apiKey = resolveApiKeyForModel({ provider, apiKeys });
 
-  const stream = streamSimple(
-    model,
-    {
-      systemPrompt,
-      messages: normalizedMessages,
-      tools: toolList,
-    },
-    {
-      maxTokens: maxOutputTokens,
-      ...resolveProviderPayloadOptions(provider),
-      apiKey,
-      signal,
-    },
-  );
+  const context = { systemPrompt, messages: normalizedMessages, tools: toolList };
+  const options = {
+    maxTokens: maxOutputTokens,
+    ...resolveProviderPayloadOptions(provider),
+    apiKey,
+    signal,
+  };
+  let activeModel = model;
+  let usedCompatFallback = false;
 
-  let assistant: AssistantMessage | null = null;
-  for await (const event of stream) {
-    if (event.type === "text_delta") {
-      onChunk(event.delta);
-    } else if (event.type === "done") {
-      assistant = event.message;
-      break;
-    } else if (event.type === "error") {
-      const message = event.error?.errorMessage || "Agent stream failed.";
-      throw new Error(message);
+  while (true) {
+    let emittedText = false;
+    try {
+      const stream = streamSimple(activeModel, context, options);
+      let assistant: AssistantMessage | null = null;
+      for await (const event of stream) {
+        if (event.type === "text_delta") {
+          emittedText = true;
+          onChunk(event.delta);
+        } else if (event.type === "done") {
+          assistant = event.message;
+          break;
+        } else if (event.type === "error") {
+          throw new Error(event.error?.errorMessage || "Agent stream failed.");
+        }
+      }
+
+      if (!assistant) {
+        assistant = await stream.result().catch(() => null);
+      }
+      if (!assistant) {
+        throw new Error("Agent stream ended without a result.");
+      }
+      onAssistant(assertAgentAssistantSucceeded(assistant));
+      return;
+    } catch (error) {
+      const fallbackModel =
+        !emittedText && !usedCompatFallback
+          ? resolveAgentCompatFallbackModel({ provider, model: activeModel, error })
+          : null;
+      if (!fallbackModel) throw error;
+      activeModel = fallbackModel;
+      usedCompatFallback = true;
     }
   }
-
-  if (!assistant) {
-    assistant = await stream.result().catch(() => null);
-  }
-
-  if (!assistant) {
-    throw new Error("Agent stream ended without a result.");
-  }
-
-  onAssistant(assistant);
 }
 
 export async function completeAgentResponse({
@@ -383,6 +416,7 @@ export async function completeAgentResponse({
   modelOverride,
   tools,
   automationEnabled,
+  signal,
 }: {
   env: Record<string, string | undefined>;
   pageUrl: string;
@@ -392,6 +426,7 @@ export async function completeAgentResponse({
   modelOverride: string | null;
   tools: string[];
   automationEnabled: boolean;
+  signal?: AbortSignal;
 }): Promise<AssistantMessage> {
   const normalizedMessages = normalizeMessages(messages);
   const toolList = resolveToolList(automationEnabled, tools, TOOL_DEFINITIONS);
@@ -420,6 +455,7 @@ export async function completeAgentResponse({
         timeoutMs: 120_000,
         env,
         config: resolved.cliConfig,
+        signal,
       }),
     );
     return { role: "assistant", content: result.text } as unknown as AssistantMessage;
@@ -428,19 +464,17 @@ export async function completeAgentResponse({
   const { provider, model, maxOutputTokens, apiKeys } = resolved;
   const apiKey = resolveApiKeyForModel({ provider, apiKeys });
 
-  const assistant = await completeSimple(
-    model,
-    {
-      systemPrompt,
-      messages: normalizedMessages,
-      tools: toolList,
-    },
-    {
-      maxTokens: maxOutputTokens,
-      ...resolveProviderPayloadOptions(provider),
-      apiKey,
-    },
-  );
+  const context = { systemPrompt, messages: normalizedMessages, tools: toolList };
+  const options = {
+    maxTokens: maxOutputTokens,
+    ...resolveProviderPayloadOptions(provider),
+    apiKey,
+    signal,
+  };
+  const assistant = await completeSimple(model, context, options);
+  if (assistant.stopReason !== "error" && assistant.stopReason !== "aborted") return assistant;
 
-  return assistant;
+  const fallbackModel = resolveAgentCompatFallbackModel({ provider, model, error: assistant });
+  if (!fallbackModel) return assertAgentAssistantSucceeded(assistant);
+  return assertAgentAssistantSucceeded(await completeSimple(fallbackModel, context, options));
 }

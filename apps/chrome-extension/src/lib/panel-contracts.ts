@@ -1,4 +1,7 @@
-import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
+import type {
+  AgentAssistantMessage as AssistantMessage,
+  AgentMessage as Message,
+} from "@steipete/summarize-core/runtime";
 import type { SseSlidesData } from "./runtime-contracts";
 
 export type UiState = {
@@ -17,6 +20,9 @@ export type UiState = {
     slidesOcrEnabled: boolean;
     slidesLayout: "strip" | "gallery";
     slideRuntime: "browser" | "daemon";
+    summaryRuntime: "direct" | "daemon";
+    providerConfigured: boolean;
+    daemonHintDismissed: boolean;
     fontSize: number;
     lineHeight: number;
     model: string;
@@ -24,6 +30,15 @@ export type UiState = {
     tokenPresent: boolean;
   };
   status: string;
+};
+
+export type BrowserAiSummaryInput = {
+  text: string;
+  length: "short" | "medium" | "long";
+  keyMoments: Array<{
+    startSeconds: number;
+    text: string;
+  }>;
 };
 
 export type RunStart = {
@@ -89,7 +104,12 @@ export type BgToPanel =
   | { type: "ui:state"; state: UiState }
   | { type: "ui:status"; status: string }
   | { type: "run:start"; run: RunStart }
-  | { type: "run:snapshot"; run: RunStart; markdown: string }
+  | {
+      type: "run:snapshot";
+      run: RunStart;
+      markdown: string;
+      browserAi?: BrowserAiSummaryInput;
+    }
   | { type: "run:error"; message: string }
   | { type: "ui:cache-cleared" }
   | {

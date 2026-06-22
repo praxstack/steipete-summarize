@@ -1,4 +1,5 @@
 import type { SummarizeRequestOverrides } from "@steipete/summarize-core/runtime";
+import { readStoredSettings, writeStoredSettings } from "./settings-storage";
 import {
   type ColorMode,
   type ColorScheme,
@@ -17,6 +18,12 @@ type TranscriberSetting = "" | NonNullable<SummarizeRequestOverrides["transcribe
 
 export type Settings = {
   token: string;
+  daemonPort: string;
+  summaryRuntime: SummaryRuntime;
+  provider: DirectProvider;
+  providerApiKeys: Partial<Record<DirectProvider, string>>;
+  providerBaseUrls: Partial<Record<DirectProvider, string>>;
+  daemonHintDismissed: boolean;
   autoSummarize: boolean;
   hoverSummaries: boolean;
   chatEnabled: boolean;
@@ -54,32 +61,25 @@ export type Settings = {
 
 export type SlidesLayout = "strip" | "gallery";
 export type SlideRuntime = "browser" | "daemon";
+export type SummaryRuntime = "direct" | "daemon";
+export type DirectProvider =
+  | "openai"
+  | "openrouter"
+  | "anthropic"
+  | "google"
+  | "xai"
+  | "zai"
+  | "nvidia"
+  | "minimax"
+  | "github"
+  | "ollama";
 
-const storageKey = "settings";
-const fallbackStorageKey = "summarize.settings";
+export type ProviderSettings = {
+  provider: DirectProvider;
+  apiKeys: Partial<Record<DirectProvider, string>>;
+  baseUrls: Partial<Record<DirectProvider, string>>;
+};
 
-function getLocalStorageArea(): chrome.storage.StorageArea | null {
-  return globalThis.chrome?.storage?.local ?? null;
-}
-
-function loadFallbackSettings(): Record<string, unknown> {
-  try {
-    const raw = globalThis.localStorage?.getItem(fallbackStorageKey);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveFallbackSettings(settings: Settings): void {
-  try {
-    globalThis.localStorage?.setItem(fallbackStorageKey, JSON.stringify(settings));
-  } catch {
-    // Best-effort fallback for non-extension previews.
-  }
-}
 const COUNT_PATTERN = /^(?<value>\d+(?:\.\d+)?)(?<unit>k|m)?$/i;
 const DURATION_PATTERN = /^(?<value>\d+(?:\.\d+)?)(?<unit>ms|s|m|h)?$/i;
 const MIN_MAX_CHARS = 20_000;
@@ -87,6 +87,7 @@ export const MAX_MAX_CHARS = 2_000_000;
 const MIN_MAX_OUTPUT_TOKENS = 16;
 const MIN_FONT_SIZE = 12;
 const MAX_FONT_SIZE = 20;
+export const DEFAULT_DAEMON_PORT = "8787";
 
 const legacyFontFamilyMap = new Map<string, string>([
   [
@@ -102,7 +103,13 @@ function normalizeFontFamily(value: unknown): string {
   return legacyFontFamilyMap.get(trimmed) ?? trimmed;
 }
 
-function normalizeModel(value: unknown): string {
+function normalizeModel(value: unknown, raw?: Record<string, unknown>): string {
+  if (
+    typeof raw?.summaryRuntime === "string" &&
+    raw.summaryRuntime.trim().toLowerCase() === "browser"
+  ) {
+    return "browser/gemini-nano";
+  }
   if (typeof value !== "string") return defaultSettings.model;
   const trimmed = value.trim();
   if (!trimmed) return defaultSettings.model;
@@ -206,6 +213,44 @@ function normalizeSlideRuntime(value: unknown, raw?: Record<string, unknown>): S
     return legacyDaemonlessSlides ? "browser" : "daemon";
   }
   return defaultSettings.slideRuntime;
+}
+
+function normalizeSummaryRuntime(value: unknown, raw?: Record<string, unknown>): SummaryRuntime {
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === "daemon") return "daemon";
+    if (trimmed === "browser" || trimmed === "direct") return "direct";
+  }
+  return normalizeSlideRuntime(raw?.slideRuntime, raw) === "daemon" ? "daemon" : "direct";
+}
+
+const directProviders = new Set<DirectProvider>([
+  "openai",
+  "openrouter",
+  "anthropic",
+  "google",
+  "xai",
+  "zai",
+  "nvidia",
+  "minimax",
+  "github",
+  "ollama",
+]);
+
+function normalizeProvider(value: unknown): DirectProvider {
+  if (typeof value !== "string") return defaultSettings.provider;
+  const normalized = value.trim().toLowerCase() as DirectProvider;
+  return directProviders.has(normalized) ? normalized : defaultSettings.provider;
+}
+
+function normalizeProviderMap(value: unknown): Partial<Record<DirectProvider, string>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Partial<Record<DirectProvider, string>> = {};
+  for (const provider of directProviders) {
+    const entry = (value as Record<string, unknown>)[provider];
+    if (typeof entry === "string") out[provider] = entry.trim();
+  }
+  return out;
 }
 
 function normalizeFirecrawlMode(value: unknown): FirecrawlModeSetting {
@@ -322,8 +367,23 @@ function normalizeLineHeight(value: unknown): number {
   return Math.round(value * 100) / 100;
 }
 
+export function normalizeDaemonPort(value: unknown): string {
+  if (typeof value !== "string" && typeof value !== "number") return DEFAULT_DAEMON_PORT;
+  const trimmed = String(value).trim();
+  if (!/^\d+$/.test(trimmed)) return DEFAULT_DAEMON_PORT;
+  const port = Number(trimmed);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return DEFAULT_DAEMON_PORT;
+  return String(port);
+}
+
 export const defaultSettings: Settings = {
   token: "",
+  daemonPort: DEFAULT_DAEMON_PORT,
+  summaryRuntime: "direct",
+  provider: "openai",
+  providerApiKeys: {},
+  providerBaseUrls: {},
+  daemonHintDismissed: false,
   autoSummarize: true,
   hoverSummaries: false,
   chatEnabled: true,
@@ -361,30 +421,21 @@ export const defaultSettings: Settings = {
 };
 
 export async function loadSettings(): Promise<Settings> {
-  const storage = getLocalStorageArea();
-  const res = storage
-    ? await new Promise<Record<string, unknown>>((resolve, reject) => {
-        let settled = false;
-        const maybePromise = storage.get(storageKey, (result) => {
-          settled = true;
-          resolve(result as Record<string, unknown>);
-        });
-        if (maybePromise && typeof (maybePromise as Promise<unknown>).then === "function") {
-          (maybePromise as Promise<Record<string, unknown>>)
-            .then((result) => {
-              if (settled) return;
-              resolve(result as Record<string, unknown>);
-            })
-            .catch(reject);
-        }
-      })
-    : { [storageKey]: loadFallbackSettings() };
-  const raw = (res[storageKey] ?? {}) as Partial<Settings> & Record<string, unknown>;
+  const raw = (await readStoredSettings()) as Partial<Settings> & Record<string, unknown>;
   return {
     ...defaultSettings,
     ...raw,
     token: typeof raw.token === "string" ? raw.token : defaultSettings.token,
-    model: normalizeModel(raw.model),
+    daemonPort: normalizeDaemonPort(raw.daemonPort),
+    summaryRuntime: normalizeSummaryRuntime(raw.summaryRuntime, raw),
+    provider: normalizeProvider(raw.provider),
+    providerApiKeys: normalizeProviderMap(raw.providerApiKeys),
+    providerBaseUrls: normalizeProviderMap(raw.providerBaseUrls),
+    daemonHintDismissed:
+      typeof raw.daemonHintDismissed === "boolean"
+        ? raw.daemonHintDismissed
+        : defaultSettings.daemonHintDismissed,
+    model: normalizeModel(raw.model, raw),
     length: normalizeLength(raw.length),
     language: normalizeLanguage(raw.language),
     promptOverride: normalizePromptOverride(raw.promptOverride),
@@ -449,6 +500,11 @@ export async function loadSettings(): Promise<Settings> {
 export async function saveSettings(settings: Settings): Promise<void> {
   const normalized = {
     ...settings,
+    daemonPort: normalizeDaemonPort(settings.daemonPort),
+    summaryRuntime: normalizeSummaryRuntime(settings.summaryRuntime),
+    provider: normalizeProvider(settings.provider),
+    providerApiKeys: normalizeProviderMap(settings.providerApiKeys),
+    providerBaseUrls: normalizeProviderMap(settings.providerBaseUrls),
     model: normalizeModel(settings.model),
     length: normalizeLength(settings.length),
     language: normalizeLanguage(settings.language),
@@ -472,16 +528,15 @@ export async function saveSettings(settings: Settings): Promise<void> {
     colorScheme: normalizeColorScheme(settings.colorScheme),
     colorMode: normalizeColorMode(settings.colorMode),
   };
-  const storage = getLocalStorageArea();
-  if (!storage) {
-    saveFallbackSettings(normalized);
-    return;
-  }
-  await storage.set({
-    [storageKey]: {
-      ...normalized,
-    },
-  });
+  await writeStoredSettings(normalized);
+}
+
+export function getProviderSettings(settings: Settings): ProviderSettings {
+  return {
+    provider: settings.provider,
+    apiKeys: settings.providerApiKeys,
+    baseUrls: settings.providerBaseUrls,
+  };
 }
 
 export async function patchSettings(patch: Partial<Settings>): Promise<Settings> {

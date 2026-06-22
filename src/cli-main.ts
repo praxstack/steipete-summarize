@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CommanderError } from "commander";
+import { terminateTrackedProcesses } from "./processes.js";
 import { runCli } from "./run.js";
 
 export type CliMainArgs = {
@@ -21,6 +23,24 @@ export function handlePipeErrors(stream: NodeJS.WritableStream, exit: (code: num
     }
     throw error;
   });
+}
+
+export function installCliSignalHandlers(exit: (code: number) => void): () => void {
+  let handled = false;
+  const handleSignal = (signal: "SIGINT" | "SIGTERM", exitCode: number) => {
+    if (handled) return;
+    handled = true;
+    terminateTrackedProcesses(signal);
+    queueMicrotask(() => exit(exitCode));
+  };
+  const handleSigint = () => handleSignal("SIGINT", 130);
+  const handleSigterm = () => handleSignal("SIGTERM", 143);
+  process.once("SIGINT", handleSigint);
+  process.once("SIGTERM", handleSigterm);
+  return () => {
+    process.removeListener("SIGINT", handleSigint);
+    process.removeListener("SIGTERM", handleSigterm);
+  };
 }
 
 function parseDotenv(text: string): Record<string, string> {
@@ -123,6 +143,7 @@ export async function runCliMain({
 }: CliMainArgs): Promise<void> {
   handlePipeErrors(stdout, exit);
   handlePipeErrors(stderr, exit);
+  const cleanupSignalHandlers = installCliSignalHandlers(exit);
 
   const verbose =
     argv.includes("--verbose") ||
@@ -134,6 +155,17 @@ export async function runCliMain({
     const mergedEnv = env === process.env ? { ...(await loadDotenvFromCwd()), ...env } : env;
     await runCli(argv, { env: mergedEnv, fetch, stdout, stderr });
   } catch (error: unknown) {
+    if (error instanceof CommanderError) {
+      setExitCode(error.exitCode);
+      return;
+    }
+
+    const exitCode = (error as { exitCode?: unknown } | null)?.exitCode;
+    if ((error as { silent?: unknown } | null)?.silent === true && typeof exitCode === "number") {
+      setExitCode(exitCode);
+      return;
+    }
+
     const isTty = Boolean((stderr as unknown as { isTTY?: boolean }).isTTY);
     if (isTty) stderr.write("\n");
 
@@ -149,12 +181,9 @@ export async function runCliMain({
 
     const message =
       error instanceof Error ? error.message : error ? String(error) : "Unknown error";
-    const exitCode = (error as { exitCode?: unknown } | null)?.exitCode;
-    if ((error as { silent?: unknown } | null)?.silent === true && typeof exitCode === "number") {
-      setExitCode(exitCode);
-      return;
-    }
     stderr.write(`${stripAnsi(message)}\n`);
     setExitCode(typeof exitCode === "number" ? exitCode : 1);
+  } finally {
+    cleanupSignalHandlers();
   }
 }

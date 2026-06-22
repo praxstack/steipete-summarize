@@ -55,6 +55,14 @@ describe("chrome/settings", () => {
     expect(loaded.slidesOcrEnabled).toBe(true);
   });
 
+  it("persists daemon hint dismissal", async () => {
+    await patchSettings({ daemonHintDismissed: true });
+    expect((await loadSettings()).daemonHintDismissed).toBe(true);
+
+    storage.settings = { daemonHintDismissed: "yes" };
+    expect((await loadSettings()).daemonHintDismissed).toBe(false);
+  });
+
   it("normalizes slide runtime preferences", async () => {
     await patchSettings({ slideRuntime: "daemon" });
     expect((await loadSettings()).slideRuntime).toBe("daemon");
@@ -72,6 +80,14 @@ describe("chrome/settings", () => {
 
     storage.settings = { daemonlessSlides: true };
     expect((await loadSettings()).slideRuntime).toBe("browser");
+  });
+
+  it("migrates the old browser AI runtime to Direct with Gemini Nano selected", async () => {
+    storage.settings = { summaryRuntime: "browser", model: "auto" };
+
+    const loaded = await loadSettings();
+    expect(loaded.summaryRuntime).toBe("direct");
+    expect(loaded.model).toBe("browser/gemini-nano");
   });
 
   it("normalizes advanced overrides on save", async () => {

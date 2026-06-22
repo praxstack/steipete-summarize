@@ -6,6 +6,7 @@ import {
   closeExtension,
   getBrowserFromProject,
   getExtensionUrl,
+  getSettings,
   getOpenPickerList,
   launchExtension,
   openExtensionPage,
@@ -69,13 +70,29 @@ test("sidepanel updates chat visibility when settings change", async ({
   const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
 
   try {
-    await seedSettings(harness, { chatEnabled: true });
+    await mockDaemonSummarize(harness);
+    await seedSettings(harness, {
+      chatEnabled: true,
+      summaryRuntime: "daemon",
+      token: "test-token",
+    });
     const page = await openExtensionPage(harness, "sidepanel.html", "#title", () => {
       (window as typeof globalThis & { IntersectionObserver?: unknown }).IntersectionObserver =
         undefined;
     });
     await waitForPanelPort(page);
     await waitForSettingsHydratedHook(page);
+    await sendBgMessage(harness, {
+      type: "ui:state",
+      state: buildUiState({
+        daemon: { ok: true, authed: true },
+        settings: {
+          chatEnabled: true,
+          summaryRuntime: "daemon",
+          tokenPresent: true,
+        },
+      }),
+    });
     await waitForChatEnabled(page, true);
     await expect(page.locator("#chatDock")).toBeVisible();
 
@@ -83,6 +100,89 @@ test("sidepanel updates chat visibility when settings change", async ({
     await waitForChatEnabled(page, false);
     await expect(page.locator("#chatDock")).toBeHidden();
     await expect(page.locator("#chatContainer")).toBeHidden();
+    assertNoErrors(harness);
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir);
+  }
+});
+
+test("sidepanel hides daemon-backed chat when browser mode has no daemon", async ({
+  browserName: _browserName,
+}, testInfo) => {
+  const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
+
+  try {
+    await seedSettings(harness, {
+      token: "",
+      chatEnabled: true,
+      slideRuntime: "browser",
+    });
+    const page = await openExtensionPage(harness, "sidepanel.html", "#title");
+    await waitForPanelPort(page);
+    await waitForSettingsHydratedHook(page);
+    await sendBgMessage(harness, {
+      type: "ui:state",
+      state: buildUiState({
+        daemon: { ok: false, authed: false },
+        settings: {
+          chatEnabled: true,
+          slideRuntime: "browser",
+          tokenPresent: false,
+        },
+      }),
+    });
+
+    await waitForChatEnabled(page, false);
+    await expect(page.locator("#chatDock")).toBeHidden();
+    await expect(page.locator("#chatContainer")).toBeHidden();
+    assertNoErrors(harness);
+  } finally {
+    await closeExtension(harness.context, harness.userDataDir);
+  }
+});
+
+test("sidepanel default stays usable with a dismissible daemon hint", async ({
+  browserName: _browserName,
+}, testInfo) => {
+  const harness = await launchExtension(getBrowserFromProject(testInfo.project.name));
+
+  try {
+    await seedSettings(harness, {
+      token: "",
+      summaryRuntime: "direct",
+      slideRuntime: "browser",
+      model: "auto",
+    });
+    const page = await openExtensionPage(harness, "sidepanel.html", "#title");
+    await waitForPanelPort(page);
+    await sendBgMessage(harness, {
+      type: "ui:state",
+      state: buildUiState({
+        daemon: { ok: false, authed: false },
+        settings: {
+          summaryRuntime: "direct",
+          slideRuntime: "browser",
+          providerConfigured: false,
+          daemonHintDismissed: false,
+          model: "auto",
+          tokenPresent: false,
+        },
+      }),
+    });
+
+    await expect(page.locator("#daemonHint")).toBeVisible();
+    await expect(page.locator("#daemonHint")).toContainText("Works locally in Chrome");
+    await expect(page.locator("#setup")).toBeHidden();
+    const hintLayout = await page.locator("#daemonHint").evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      overflows: element.scrollWidth > element.clientWidth,
+    }));
+    expect(hintLayout.height).toBeLessThan(72);
+    expect(hintLayout.overflows).toBe(false);
+
+    await page.locator("#daemonHintClose").click();
+    await expect(page.locator("#daemonHint")).toBeHidden();
+    await expect.poll(async () => (await getSettings(harness)).daemonHintDismissed).toBe(true);
     assertNoErrors(harness);
   } finally {
     await closeExtension(harness.context, harness.userDataDir);

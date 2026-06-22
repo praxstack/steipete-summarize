@@ -13,13 +13,16 @@ Goal: Chrome **Side Panel** (“real sidebar”) summarizes **what you see** on 
 Quickstart:
 
 - Build/load extension: `apps/chrome-extension/README.md`
-- Chrome Browser mode works immediately without a daemon for page summaries, fetchable video slides, and fetchable YouTube/direct/embedded media transcription.
+- Direct mode works immediately without a daemon. Auto uses a configured provider, otherwise Gemini Nano when available with extractive fallback.
+- Configured direct providers support summaries, chat, automation, hover summaries, and public-URL extraction without a daemon. Provider keys stay in extension-local storage.
+- Browser media provides daemonless transcription, slide extraction, and Gemini Nano per-slide summaries. OCR, process/log tools, CLI fallbacks, and broader native media support require the daemon.
 - Optional: install summarize for daemon-backed media support:
   - `npm i -g @steipete/summarize`
   - `brew install summarize` (macOS, Linux)
 - Firefox sidebar build: `pnpm -C apps/chrome-extension build:firefox` (load via `about:debugging` → temporary add-on)
 - Open side panel → copy token install command → run for daemon mode:
-  - `summarize daemon install --token <TOKEN>` (macOS: LaunchAgent, Linux: systemd user, Windows: Scheduled Task)
+  - `summarize daemon install --token <TOKEN> --port 8787` (macOS: LaunchAgent, Linux: systemd user, Windows: Scheduled Task)
+  - Non-default port: replace `8787`, then set the same value in **Options → Runtime → Daemon → Port**.
 - Verify:
   - `summarize daemon status`
   - Restart (if needed): `summarize daemon restart`
@@ -32,7 +35,7 @@ Firefox notes:
 
 Dev (repo checkout):
 
-- Use: `pnpm summarize daemon install --token <TOKEN> --dev` (autostart service runs `src/cli.ts` via `tsx`, no `dist/` build required).
+- Use: `pnpm summarize daemon install --token <TOKEN> --dev` (autostart service runs `src/cli.ts` via Node's native TypeScript support; no `dist/` build required).
 - E2E (Playwright): `pnpm -C apps/chrome-extension test:e2e`
   - First run: `pnpm -C apps/chrome-extension exec playwright install chromium`
   - Chromium runs headless by default.
@@ -42,6 +45,7 @@ Dev (repo checkout):
 
 - “Daemon not reachable”:
   - `summarize daemon status`
+  - If the daemon uses a non-default port, confirm **Options → Runtime → Daemon → Port** matches the daemon configuration.
   - Logs: `~/.summarize/logs/daemon.err.log`
 - Windows install:
   - `summarize daemon install` registers a Scheduled Task via `schtasks /Create /XML`, which requires an **elevated** shell. Run it from an Administrator PowerShell/cmd; otherwise you'll see `schtasks create failed: ERROR: Access is denied.`
@@ -52,7 +56,7 @@ Dev (repo checkout):
   - Re-run: `summarize daemon install --token <TOKEN>`.
 - Windows containers:
   - `summarize daemon install --token <TOKEN>` starts the daemon for the current container session but does not create a Scheduled Task.
-  - Run that command manually each time the container starts, or add it to your container startup. Also publish the daemon port in `docker-compose.yml`:
+  - Run that command manually each time the container starts, or add it to your container startup. Also publish the configured daemon port in `docker-compose.yml` (default `8787`):
     `ports: ['8787:8787']`
     `command: ['cmd', '/c', 'summarize daemon install --token <TOKEN>']`
   - Then restart the container and verify `http://127.0.0.1:8787/health`.
@@ -75,7 +79,7 @@ Dev (repo checkout):
   - The content script wasn’t injected (yet), or Chrome blocked site access.
   - Chrome → extension details → “Site access” → “On all sites” (or allow the domain), then reload the tab.
 - “<site> wants to look for and connect to any device on your local network”:
-  - Trigger: content scripts (page context) hitting the daemon on `http://127.0.0.1:8787` (hover summaries) can cause Chrome to attribute the request to the current origin and prompt per-site.
+  - Trigger: content scripts (page context) hitting the configured daemon origin (default `http://127.0.0.1:8787`) can cause Chrome to attribute the request to the current origin and prompt per-site.
   - Fix: hover summaries must proxy daemon calls via the extension background service worker (reload the extension after updating).
   - Verify daemon: `summarize daemon status` (or `curl http://127.0.0.1:8787/health`).
   - Repro/dev: `pnpm -C apps/chrome-extension dev` then enable “Hover summaries” and hover a link.
@@ -87,11 +91,13 @@ Dev (repo checkout):
   - Background service worker: tab + navigation tracking, content extraction, starts summarize runs.
   - Chrome offscreen page: runs MediaBunny with native WebCodecs for ranged video slides and chunked local media transcription, plus an idle-evictable Whisper runtime.
   - Content script: extract readable article text from the **rendered DOM** via Readability; also detect SPA URL changes.
+  - Direct provider adapters: OpenAI-compatible SSE, Anthropic Messages SSE, and Gemini SSE, normalized to the same summary/chat/tool-call contracts.
   - Panel page streams SSE directly (MV3 service workers can be flaky for long-lived streams).
 - **Daemon (local, autostart service)**
-  - HTTP server on `127.0.0.1:8787` only.
+  - HTTP server on `127.0.0.1` (default port `8787`).
   - Token-authenticated API.
   - Runs the existing summarize pipeline (env/config-based) and streams tokens to client via SSE.
+  - Port is configurable: set **Options → Runtime → Daemon → Port** to match a daemon started with `summarize daemon install --port <n>` (e.g. when `8787` is taken by another service). The extension talks to `127.0.0.1:<port>` for every daemon call.
 
 ## Data Flow
 
@@ -99,8 +105,8 @@ Dev (repo checkout):
 2. Panel sends a “ready” message to the background (plus periodic “ping” heartbeats while open).
 3. On nav/tab change (and auto enabled): background asks the content script to extract `{ url, title, text }` (best-effort).
 4. In Chrome Browser mode, fetchable audio is decoded in bounded chunks through MediaBunny/WebCodecs and transcribed locally. YouTube prefers active-player/watch-page direct audio, then Android VR, buffered direct audio, and captured SABR.
-5. In Daemon mode, background `POST`s payload to `/v1/summarize` with `Authorization: Bearer <token>`.
-6. Panel opens `/v1/summarize/<id>/events` (SSE) and renders streamed Markdown.
+5. In Direct mode, background uses Gemini Nano for Auto without provider credentials, or calls the selected provider and returns the normalized summary/chat result to the panel.
+6. In Daemon mode, background `POST`s payload to `/v1/summarize` with `Authorization: Bearer <token>`; the panel streams `/v1/summarize/<id>/events`.
 
 ## Auto Mode (URL + Page Text)
 
@@ -153,7 +159,11 @@ See `docs/media.md` for detection and transcript rules.
 ## Model Selection UX
 
 - Settings:
-  - Model preset (Options → Advanced): `auto` | `free` | custom string (e.g. `openai/gpt-5-mini`, `openai/gpt-5.5`, `openrouter/...`). OpenAI fast service tier is configured via `openai.serviceTier`.
+  - AI connection (Options → Runtime): Direct | Daemon.
+  - Direct provider and credential/base URL (Options → Runtime). `auto` uses the configured provider, otherwise Gemini Nano; an explicit provider prefix overrides the selection.
+  - Media/slide runtime (Options → Runtime): Browser | Daemon.
+  - Daemon port (Options → Runtime; default `8787`): must match the installed daemon port.
+  - Model preset: `auto` | Gemini Nano | `free` | custom string (e.g. `openai/gpt-5-mini`, `openrouter/...`, `github-copilot/...`). Explicit Gemini Nano summaries stay on-device in either connection mode.
   - Length: `short|medium|long|xl|xxl` (or a character target like `20k`). Tooltips show target ranges + paragraph guidance (from `packages/core/src/prompts/summary-lengths.ts`).
   - Language: `auto` (match source) or a tag like `en`, `de`, `pt-BR` (or free-form like “German”).
   - Prompt override (advanced): custom instruction prefix (context + content still appended).
@@ -162,7 +172,7 @@ See `docs/media.md` for detection and transcript rules.
   - Typography: font family (dropdown + custom), font size (slider).
 - Advanced overrides (Options → Advanced tab).
   - Leave blank to use daemon config/defaults; set a value to override.
-  - Chat (advanced): enable/disable the side panel chat input (default on; summary is the first message).
+  - Chat: enabled for a configured Direct provider or authenticated daemon.
   - Summary timestamps (advanced): include `[mm:ss]` links in summaries for media when available (default on).
   - Slides parallel (advanced): show summary first and extract slides in parallel (default on).
   - Slides OCR text (advanced): allow OCR text as a slide text source (default off).
@@ -184,11 +194,12 @@ Problem: daemon must be secured; extension must discover and pair with it.
 - Side panel “Setup” state:
   - Generates token (random, 32+ bytes).
   - Shows:
-    - `summarize daemon install --token <TOKEN>` (macOS: LaunchAgent, Linux: systemd user, Windows: Scheduled Task)
+    - `summarize daemon install --token <TOKEN> --port <PORT>` (macOS: LaunchAgent, Linux: systemd user, Windows: Scheduled Task)
     - `summarize daemon status`
   - “Copy command” button.
 - Daemon stores paired tokens in `~/.summarize/daemon.json`.
 - Extension stores token in `chrome.storage.local`.
+- The manifest permits HTTP to `127.0.0.1` on any port; bearer tokens are attached only for the exact configured daemon origin.
 - If daemon unreachable or 401: show Setup state + troubleshooting.
 
 ## Daemon Endpoints
@@ -263,7 +274,7 @@ Notes:
 ## Daemon Autostart
 
 - CLI commands:
-  - `summarize daemon install --token <token> [--port 8787]`
+  - `summarize daemon install --token <token> [--port <PORT>]`
     - Writes `~/.summarize/daemon.json`
     - Installs platform autostart service; verifies `/health`
   - `summarize daemon uninstall`

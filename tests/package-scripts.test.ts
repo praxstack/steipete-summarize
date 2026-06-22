@@ -13,6 +13,9 @@ const corePackage = JSON.parse(readFileSync(resolve("packages/core/package.json"
   engines: Record<string, string>;
 };
 const releaseScript = readFileSync(resolve("scripts/release.sh"), "utf8");
+const registerTypeScript = readFileSync(resolve("scripts/register-typescript.mjs"), "utf8");
+const pnpmWorkspace = readFileSync(resolve("pnpm-workspace.yaml"), "utf8");
+const pnpmLockfile = readFileSync(resolve("pnpm-lock.yaml"), "utf8");
 const oxfmtConfig = JSON5.parse(readFileSync(resolve(".oxfmtrc.jsonc"), "utf8")) as {
   ignorePatterns?: string[];
 };
@@ -43,10 +46,23 @@ describe("package scripts", () => {
     );
   });
 
-  it("builds core before source CLI aliases", () => {
-    expect(rootPackage.scripts["dev:cli"]).toBe("pnpm -C packages/core build && tsx src/cli.ts");
+  it("runs source CLI aliases against core source without rebuilding shared output", () => {
+    expect(rootPackage.scripts["dev:cli"]).toBe(
+      "node --import ./scripts/register-typescript.mjs src/cli.ts",
+    );
     expect(rootPackage.scripts.s).toBe("pnpm dev:cli");
     expect(rootPackage.scripts.summarize).toBe("pnpm dev:cli");
+    expect(registerTypeScript).toContain('"packages", "core", "src"');
+    expect(registerTypeScript).toContain('"@steipete/summarize-core/"');
+  });
+
+  it("uses Node-native TypeScript without tsx or esbuild", () => {
+    expect(rootPackage.devDependencies.tsx).toBeUndefined();
+    expect(rootPackage.devDependencies.esbuild).toBeUndefined();
+    expect(pnpmWorkspace).toContain('"wxt>esbuild": "-"');
+    expect(pnpmWorkspace).toContain('"vite>esbuild": "-"');
+    expect(pnpmWorkspace).toContain('"vite>tsx": "-"');
+    expect(pnpmLockfile).not.toMatch(/^\s{2}(?:esbuild|tsx)@/mu);
   });
 
   it("typechecks both workspace layers from the root script", () => {

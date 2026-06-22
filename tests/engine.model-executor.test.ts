@@ -24,13 +24,14 @@ vi.mock("../src/engine/model-call.js", () => ({
 function createTestModelExecutor(
   openaiUseChatCompletions: boolean | undefined,
   streamingEnabled = false,
+  retries = 0,
 ) {
   return createModelExecutor({
     env: {},
     envForRun: {},
     execFileImpl: vi.fn(),
     timeoutMs: 1000,
-    retries: 0,
+    retries,
     streamingEnabled,
     cliConfigForRun: null,
     cliAvailability: {},
@@ -212,6 +213,7 @@ describe("model executor streaming", () => {
     mocks.streamTextWithModelId.mockResolvedValue({
       textStream: textStream(),
       usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
       provider: "openai",
       canonicalModelId: "openai/gpt-5.4",
       lastError: () => null,
@@ -249,6 +251,7 @@ describe("model executor streaming", () => {
     mocks.streamTextWithModelId.mockResolvedValue({
       textStream: textStream(),
       usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
       provider: "openai",
       canonicalModelId: "openai/gpt-5.4",
       lastError: () => null,
@@ -271,6 +274,75 @@ describe("model executor streaming", () => {
     expect(result).toMatchObject({ summary: "Final value", summaryEmitted: false });
   });
 
+  it("restores a repeated delta suffix from the authoritative final text", async () => {
+    async function* textStream() {
+      yield "repeat";
+      yield "repeat";
+    }
+    mocks.streamTextWithModelId.mockResolvedValue({
+      textStream: textStream(),
+      usage: Promise.resolve(null),
+      finalText: Promise.resolve("repeatrepeat"),
+      provider: "openai",
+      canonicalModelId: "openai/gpt-5.4",
+      lastError: () => null,
+    });
+
+    const engine = createTestModelExecutor(undefined, true);
+    const result = await engine.runSummaryAttempt({
+      attempt: {
+        transport: "native",
+        userModelId: "openai/gpt-5.4",
+        llmModelId: "openai/gpt-5.4",
+        openrouterProviders: null,
+        forceOpenRouter: false,
+        requiredEnv: "OPENAI_API_KEY",
+      },
+      prompt: { userText: "Summarize this." },
+      allowStreaming: true,
+    });
+
+    expect(result).toMatchObject({ summary: "repeatrepeat", summaryEmitted: false });
+  });
+
+  it("emits authoritative final text when the stream has no deltas", async () => {
+    async function* textStream() {}
+    mocks.streamTextWithModelId.mockResolvedValue({
+      textStream: textStream(),
+      usage: Promise.resolve(null),
+      finalText: Promise.resolve("Recovered summary"),
+      provider: "openai",
+      canonicalModelId: "openai/gpt-5.4",
+      lastError: () => null,
+    });
+    const onChunk = vi.fn(() => true);
+    const onDone = vi.fn(() => false);
+    const onReset = vi.fn();
+
+    const engine = createTestModelExecutor(undefined, true);
+    const result = await engine.runSummaryAttempt({
+      attempt: {
+        transport: "native",
+        userModelId: "openai/gpt-5.4",
+        llmModelId: "openai/gpt-5.4",
+        openrouterProviders: null,
+        forceOpenRouter: false,
+        requiredEnv: "OPENAI_API_KEY",
+      },
+      prompt: { userText: "Summarize this." },
+      allowStreaming: true,
+      streamHandler: { onChunk, onDone, onReset },
+    });
+
+    expect(result).toMatchObject({ summary: "Recovered summary", summaryEmitted: true });
+    expect(onChunk).toHaveBeenCalledWith({
+      streamed: "Recovered summary",
+      prevStreamed: "",
+      appended: "Recovered summary",
+    });
+    expect(onDone).toHaveBeenCalledWith("Recovered summary");
+  });
+
   it("emits a complete fallback after an invisible stream prefix", async () => {
     async function* textStream() {
       yield "\n";
@@ -279,6 +351,7 @@ describe("model executor streaming", () => {
     mocks.streamTextWithModelId.mockResolvedValue({
       textStream: textStream(),
       usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
       provider: "openai",
       canonicalModelId: "openai/gpt-5.4",
       lastError: () => null,
@@ -328,6 +401,7 @@ describe("model executor streaming", () => {
     mocks.streamTextWithModelId.mockResolvedValue({
       textStream: textStream(),
       usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
       provider: "openai",
       canonicalModelId: "openai/gpt-5.4",
       lastError: () => null,
@@ -353,6 +427,78 @@ describe("model executor streaming", () => {
     expect(hasEngineErrorCode(error, "SUMMARY_STREAM_INTERRUPTED")).toBe(true);
   });
 
+  it("does not retry the model when the stream output handler fails", async () => {
+    async function* textStream() {
+      yield "Buffered";
+    }
+    mocks.streamTextWithModelId.mockResolvedValue({
+      textStream: textStream(),
+      usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
+      provider: "openai",
+      canonicalModelId: "openai/gpt-5.4",
+      lastError: () => null,
+    });
+    const onChunk = vi.fn(() => {
+      throw Object.assign(new Error("output connection closed"), { code: "ECONNRESET" });
+    });
+    const onReset = vi.fn();
+    const engine = createTestModelExecutor(undefined, true, 1);
+
+    const error = await engine
+      .runSummaryAttempt({
+        attempt: {
+          transport: "native",
+          userModelId: "openai/gpt-5.4",
+          llmModelId: "openai/gpt-5.4",
+          openrouterProviders: null,
+          forceOpenRouter: false,
+          requiredEnv: "OPENAI_API_KEY",
+        },
+        prompt: { userText: "Summarize this." },
+        allowStreaming: true,
+        streamHandler: { onChunk, onReset },
+      })
+      .catch((caught) => caught);
+
+    expect(hasEngineErrorCode(error, "SUMMARY_STREAM_INTERRUPTED")).toBe(true);
+    expect(error).toMatchObject({ message: "output connection closed" });
+    expect(onReset).toHaveBeenCalledOnce();
+    expect(mocks.summarizeWithModelId).not.toHaveBeenCalled();
+  });
+
+  it("retries a clean empty stream before output starts", async () => {
+    async function* textStream() {}
+    mocks.streamTextWithModelId.mockResolvedValue({
+      textStream: textStream(),
+      usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
+      provider: "openai",
+      canonicalModelId: "openai/gpt-5.4",
+      lastError: () => null,
+    });
+    const engine = createTestModelExecutor(undefined, true, 1);
+
+    await expect(
+      engine.runSummaryAttempt({
+        attempt: {
+          transport: "native",
+          userModelId: "openai/gpt-5.4",
+          llmModelId: "openai/gpt-5.4",
+          openrouterProviders: null,
+          forceOpenRouter: false,
+          requiredEnv: "OPENAI_API_KEY",
+        },
+        prompt: { userText: "Summarize this." },
+        allowStreaming: true,
+      }),
+    ).resolves.toMatchObject({ summary: "Summary." });
+
+    expect(mocks.summarizeWithModelId).toHaveBeenCalledWith(
+      expect.objectContaining({ retries: 0 }),
+    );
+  });
+
   it("resets buffered output and allows model fallback before anything is emitted", async () => {
     async function* textStream() {
       yield "Buffered";
@@ -361,6 +507,7 @@ describe("model executor streaming", () => {
     mocks.streamTextWithModelId.mockResolvedValue({
       textStream: textStream(),
       usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
       provider: "openai",
       canonicalModelId: "openai/gpt-5.4",
       lastError: () => null,
@@ -394,6 +541,7 @@ describe("model executor streaming", () => {
     mocks.streamTextWithModelId.mockResolvedValue({
       textStream: textStream(),
       usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
       provider: "openai",
       canonicalModelId: "openai/gpt-5.4",
       lastError: () => null,
@@ -433,6 +581,7 @@ describe("model executor streaming", () => {
     mocks.streamTextWithModelId.mockResolvedValue({
       textStream: textStream(),
       usage: Promise.resolve(null),
+      finalText: Promise.resolve(null),
       provider: "openai",
       canonicalModelId: "openai/gpt-5.4",
       lastError: () => null,

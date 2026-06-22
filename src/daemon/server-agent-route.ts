@@ -1,7 +1,9 @@
 import type http from "node:http";
-import type { Message } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import { encodeSseEvent, type SseEvent } from "@steipete/summarize-core/runtime";
+import type { CacheState } from "../cache.js";
 import { runWithProcessContext } from "../processes.js";
+import { type AgentCacheInput, readAgentHistory, writeAgentHistory } from "./agent-cache.js";
 import { completeAgentResponse, streamAgentResponse } from "./agent.js";
 import { json, readJsonBody, wantsJsonResponse } from "./server-http.js";
 
@@ -11,6 +13,7 @@ export async function handleAgentRoute({
   url,
   cors,
   env,
+  cacheState,
   createRunId,
 }: {
   req: http.IncomingMessage;
@@ -18,9 +21,12 @@ export async function handleAgentRoute({
   url: URL;
   cors: Record<string, string>;
   env: Record<string, string | undefined>;
+  cacheState: CacheState;
   createRunId: () => string;
 }) {
-  if (!(req.method === "POST" && url.pathname === "/v1/agent")) {
+  const isAgentRequest = req.method === "POST" && url.pathname === "/v1/agent";
+  const isHistoryRequest = req.method === "POST" && url.pathname === "/v1/agent/history";
+  if (!isAgentRequest && !isHistoryRequest) {
     return false;
   }
 
@@ -41,8 +47,14 @@ export async function handleAgentRoute({
   const pageUrl = typeof obj.url === "string" ? obj.url.trim() : "";
   const pageTitle = typeof obj.title === "string" ? obj.title.trim() : null;
   const pageContent = typeof obj.pageContent === "string" ? obj.pageContent : "";
+  const cacheContent =
+    typeof obj.cacheContent === "string" && obj.cacheContent.trim().length > 0
+      ? obj.cacheContent
+      : pageContent;
   const messages = obj.messages;
   const modelOverride = typeof obj.model === "string" ? obj.model.trim() : null;
+  const lengthRaw = obj.length;
+  const languageRaw = obj.language;
   const tools = Array.isArray(obj.tools)
     ? obj.tools.filter((tool): tool is string => typeof tool === "string")
     : [];
@@ -53,9 +65,26 @@ export async function handleAgentRoute({
     return true;
   }
 
+  const cacheInput: AgentCacheInput = {
+    pageUrl,
+    cacheContent,
+    model: modelOverride,
+    length: lengthRaw,
+    language: languageRaw,
+    automationEnabled,
+  };
+  if (isHistoryRequest) {
+    json(res, 200, { ok: true, messages: readAgentHistory({ cacheState, cacheInput }) }, cors);
+    return true;
+  }
+
   const normalizedModelOverride =
     modelOverride && modelOverride.toLowerCase() !== "auto" ? modelOverride : null;
   const runId = `agent-${createRunId()}`;
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  req.once("aborted", abort);
+  res.once("close", abort);
   const wantsJson = wantsJsonResponse(req, url);
   if (wantsJson) {
     try {
@@ -69,10 +98,13 @@ export async function handleAgentRoute({
           modelOverride: normalizedModelOverride,
           tools,
           automationEnabled,
+          signal: controller.signal,
         }),
       );
+      writeAgentHistory({ cacheState, cacheInput, messages, assistant });
       json(res, 200, { ok: true, assistant }, cors);
     } catch (error) {
+      if (controller.signal.aborted) return true;
       const message = error instanceof Error ? error.message : String(error);
       console.error("[summarize-daemon] agent failed", error);
       json(res, 500, { ok: false, error: message }, cors);
@@ -88,16 +120,12 @@ export async function handleAgentRoute({
     ...cors,
   });
 
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  req.on("close", abort);
-  res.on("close", abort);
-
   const writeEvent = (event: SseEvent) => {
     if (res.writableEnded) return;
     res.write(encodeSseEvent(event));
   };
 
+  let finalAssistant: AssistantMessage | null = null;
   try {
     await runWithProcessContext({ runId, source: "agent" }, async () =>
       streamAgentResponse({
@@ -110,10 +138,16 @@ export async function handleAgentRoute({
         tools,
         automationEnabled,
         onChunk: (text) => writeEvent({ event: "chunk", data: { text } }),
-        onAssistant: (assistant) => writeEvent({ event: "assistant", data: assistant }),
+        onAssistant: (assistant) => {
+          finalAssistant = assistant;
+          writeEvent({ event: "assistant", data: assistant });
+        },
         signal: controller.signal,
       }),
     );
+    if (finalAssistant) {
+      writeAgentHistory({ cacheState, cacheInput, messages, assistant: finalAssistant });
+    }
     writeEvent({ event: "done", data: {} });
     res.end();
   } catch (error) {

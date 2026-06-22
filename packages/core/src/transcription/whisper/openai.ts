@@ -11,13 +11,13 @@ export const OPENAI_DIARIZATION_MODEL = "gpt-4o-transcribe-diarize";
 
 export class OpenAiTranscriptionHttpError extends Error {
   override name = "OpenAiTranscriptionHttpError";
+  readonly status: number;
+  readonly retryAfterMs: number | null;
 
-  constructor(
-    readonly status: number,
-    readonly retryAfterMs: number | null,
-    detail: string | null,
-  ) {
+  constructor(status: number, retryAfterMs: number | null, detail: string | null) {
     super(`OpenAI transcription failed (${status})${detail ? `: ${detail}` : ""}`);
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 

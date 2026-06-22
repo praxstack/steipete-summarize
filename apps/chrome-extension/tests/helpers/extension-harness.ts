@@ -2,9 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 import { chromium, expect, firefox } from "@playwright/test";
+import type {
+  AgentAssistantMessage as AssistantMessage,
+  AgentMessage as Message,
+} from "@steipete/summarize-core/runtime";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const consoleErrorAllowlist: RegExp[] = [];
@@ -37,6 +40,9 @@ export type UiState = {
     slidesOcrEnabled: boolean;
     slidesLayout?: "strip" | "gallery";
     slideRuntime?: "browser" | "daemon";
+    summaryRuntime?: "direct" | "daemon";
+    providerConfigured?: boolean;
+    daemonHintDismissed: boolean;
     model: string;
     length: string;
     tokenPresent: boolean;
@@ -60,6 +66,9 @@ const defaultUiState: UiState = {
     slidesOcrEnabled: false,
     slidesLayout: "strip",
     slideRuntime: "browser",
+    summaryRuntime: "direct",
+    providerConfigured: false,
+    daemonHintDismissed: false,
     model: "auto",
     length: "xl",
     tokenPresent: true,

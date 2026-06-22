@@ -1,5 +1,5 @@
-import type { Message } from "@earendil-works/pi-ai";
-import type { RunStart, UiState } from "../../lib/panel-contracts";
+import type { AgentMessage as Message } from "@steipete/summarize-core/runtime";
+import type { BrowserAiSummaryInput, RunStart, UiState } from "../../lib/panel-contracts";
 import type { SseSlidesData } from "../../lib/runtime-contracts";
 import type { Settings } from "../../lib/settings";
 import type { SlidesSessionState } from "./slides-session-state";
@@ -32,7 +32,7 @@ export type NavigationPolicyState = {
 
 export type PendingSummaryResult =
   | { type: "run"; run: RunStart }
-  | { type: "snapshot"; run: RunStart; markdown: string };
+  | { type: "snapshot"; run: RunStart; markdown: string; browserAi?: BrowserAiSummaryInput };
 
 export type PendingSlidesRun = {
   runId: string;
@@ -86,6 +86,7 @@ export type PanelState = {
     autoSummarize: boolean;
     chatEnabled: boolean;
     automationEnabled: boolean;
+    daemonFeaturesAvailable: boolean;
     settingsHydrated: boolean;
     pendingSettingsSnapshot: Partial<Settings> | null;
     lastPanelOpen: boolean;

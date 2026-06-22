@@ -1,12 +1,68 @@
 # Changelog
 
-## 0.18.1 - Unreleased
+## 0.20.1 - Unreleased
 
 ### Fixes
 
+- LLM summaries: retry transient API and pre-output streaming failures such as HTTP 502 instead of failing immediately.
+
+## 0.20.0 - 2026-06-19
+
+### Features
+
+- Chrome extension: allow the local daemon port to be configured under **Options → Runtime → Daemon**, with consistent routing for daemon calls and authenticated slide images (#312, thanks @enieuwy).
+
+### Fixes
+
+- Streaming: share EOF-safe, whitespace-preserving SSE parsing across core, CLI providers, and extension clients.
+- Config: preserve standalone `enabled: false` values for cache, media cache, slides, and logging sections.
+- Daemon chat: surface non-streaming provider failures and apply the GitHub Models compatibility fallback to JSON and SSE agent responses.
+- Dependencies: pin patched Vite, tmp, and protobufjs releases to clear known high- and moderate-severity transitive advisories.
+
+## 0.19.0 - 2026-06-17
+
+### Features
+
+- Chrome extension: add Direct and Daemon AI connections with unified model selection; Auto uses configured direct providers or Gemini Nano on-device, while explicit Nano summaries remain local even with daemon capabilities enabled.
+- Chrome extension: add direct provider-backed summaries, chat, automation, hover summaries, and URL extraction without the daemon, with independent AI and media runtimes plus local credentials for OpenAI, OpenRouter, Anthropic, Gemini, xAI, Z.AI, NVIDIA, MiniMax, GitHub Models, Ollama, and custom base URLs.
+
+### Fixes
+
+- Chrome extension: keep the default Direct/Gemini Nano experience immediately usable and show daemon performance and capability guidance as a compact dismissible hint.
+- Chrome extension: preserve significant whitespace in SSE data fields while parsing daemon streams (#303, thanks @vincent-peng).
+- Chrome extension: invoke Gemini Nano session methods with their native receiver so Browser summaries complete instead of silently falling back.
+- Chrome extension slides: summarize each browser-extracted slide with Gemini Nano and cache CLI-compatible slide markers instead of showing raw transcript windows.
+- Chrome extension slides: batch browser-extracted frames and transcript windows into one constrained multimodal Gemini Nano prompt, splitting only on context pressure and falling back safely when unavailable.
+- Chrome extension slides: sample browser-captured frames across the full video duration so long videos include their final segment.
+- Chrome extension: use Chrome's built-in Gemini Nano Summarizer API for daemonless Browser summaries when available, with first-use download progress and automatic extractive fallback.
+- Remote transcripts: cap RSS and embedded caption response bodies at 5 MiB and cancel oversized streams. Thanks @Hinotoi-agent.
+- Chrome extension: keep Direct mode's Gemini Nano path fully daemonless even with saved tokens, fail clearly when local extraction or transcription is unavailable, and hide chat and automation without a configured direct provider or authenticated daemon.
+
+## 0.18.1 - 2026-06-13
+
+### Fixes
+
+- Podcast transcripts: allow Apple and Spotify RSS transcripts without requiring a local or cloud transcription provider.
+- CLI cancellation: terminate tracked transcriber, downloader, and media-tool process trees on SIGINT or SIGTERM.
+- Local media: accept configured Parakeet and Canary ONNX transcribers instead of rejecting them during provider preflight.
+- Streaming: preserve repeated model deltas when a chunk exactly matches the accumulated summary.
+- Daemon logging: expand `~` in configured log file paths instead of creating a literal working-directory path.
+- Media cache: persist TTL pruning to the index after an expired-entry miss.
+- Media cache: serialize index updates across concurrent daemon and CLI processes to prevent failed writes, lost entries, and orphaned files.
+- Daemon chat: cancel CLI-backed agent processes when their HTTP client disconnects.
+- Chrome extension: restore persisted chat history after the daemon agent-route refactor.
+- CLI extraction: honor `--max-extract-characters` for remote text and document assets, not only web-page extraction.
+- Cache: wait for concurrent first-open SQLite locks before enabling WAL instead of failing CLI startup with `database is locked`.
+- Slides: honor explicit and configured scene thresholds without silently replacing them through auto-tuning.
+- Slides: report the calibrated scene threshold in JSON and `slides.json` when interval fallback supplies frames after zero scene detections.
+- Slides: render extracted slide labels or debug paths for `--slides --extract` even when a direct video has no transcript.
+- CLI errors: print Commander validation failures and missing-input help once instead of duplicating them across stdout/stderr.
+- Shell completions: sync and package Fish completions for both CLI aliases and subcommands, with candidate values matched to accepted CLI choices (#277, thanks @vincent-peng).
+- Daemon: close live summarize and slide SSE connections immediately after terminal events instead of retaining them until session cleanup.
+- Browser extension: declare User Scripts permissions per browser, route Chrome users to the required extension toggle, remove an invalid manifest permission, and align documented browser minimums.
 - CLI video summaries: restore terminal and JSON output when direct video understanding delegates URL handling to the asset summarizer.
 - Chrome extension: reject YouTube caption and transcript-panel results when the tab navigates to another video during extraction.
-- Development CLI: build the core workspace before `pnpm summarize` and `pnpm s` so newly added core exports never depend on stale generated files.
+- Development CLI: load core workspace TypeScript sources directly for `pnpm summarize` and `pnpm s`, avoiding stale exports and concurrent rebuild races.
 - Network safety: block private IPv4 targets embedded in the IPv4-translatable IPv6 prefix.
 - Slides: ignore invalid zero-index slide markers without hanging while extracting slide references.
 - Slides: support FFmpeg 4 scene detection by falling back to its legacy variable-frame-rate option.

@@ -123,7 +123,7 @@ export async function detectSlideTimestamps({
   const autoTune: SlideAutoTune = autoTuneThreshold
     ? {
         enabled: true,
-        chosenThreshold: timestamps.length > 0 ? effectiveThreshold : baseThreshold,
+        chosenThreshold: effectiveThreshold,
         confidence: calibration.confidence,
         strategy: "hash",
       }
