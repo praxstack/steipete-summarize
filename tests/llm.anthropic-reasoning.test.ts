@@ -55,8 +55,8 @@ describe("prepareAnthropicReasoning", () => {
   });
 
   it("drops reasoning on registered unsupported models (Claude 3/3.5) so pi-ai does not enable thinking", () => {
-    // pi-ai 0.75.5 enables extended thinking whenever `options.reasoning` is
-    // present, regardless of `model.reasoning`. For Claude 3/3.5 the API
+    // pi-ai enables extended thinking whenever `options.reasoning` is
+    // present and `model.reasoning` is true. For Claude 3/3.5 the API
     // rejects thinking blocks, so we must drop the reasoning option entirely
     // when the user has a global `thinking` setting active.
     const baseModel = makeBase("claude-3-5-sonnet-20241022", false);
@@ -70,11 +70,14 @@ describe("prepareAnthropicReasoning", () => {
     expect(result.reasoning).toBeUndefined();
   });
 
-  it("opts synthetic models into thinking so the request body carries thinking", () => {
+  it("opts synthetic models into adaptive thinking so Bedrock gateways accept the request", () => {
     // A custom modelId not in the pi-ai registry (e.g. `Claude-Opus-4.7`
     // routed through a jdcloud-style proxy) is built via createSyntheticModel
-    // with reasoning: false. Without opting in, the pi-ai Anthropic adapter
-    // would silently drop the thinking block.
+    // with reasoning: false and no compat. Without opting in, the pi-ai
+    // Anthropic adapter would silently drop the thinking block; and without
+    // `forceAdaptiveThinking` it would send `thinking.type="enabled"` +
+    // `budget_tokens`, which Anthropic-on-Bedrock gateways reject in favor of
+    // `thinking.type="adaptive"` + `output_config.effort`.
     const baseModel = makeBase(
       "Definitely-Not-A-Real-Claude-Model-Id-42",
       false,
@@ -88,8 +91,12 @@ describe("prepareAnthropicReasoning", () => {
     expect(result.reasoning).toBe("xhigh");
     expect(result.model).not.toBe(baseModel);
     expect(result.model.reasoning).toBe(true);
+    // Custom-gateway models must request adaptive thinking.
+    expect(result.model.compat?.forceAdaptiveThinking).toBe(true);
     // Other model fields should be preserved.
     expect(result.model.id).toBe(baseModel.id);
     expect(result.model.baseUrl).toBe(baseModel.baseUrl);
+    // The original model object must not be mutated.
+    expect(baseModel.compat).toBeUndefined();
   });
 });
