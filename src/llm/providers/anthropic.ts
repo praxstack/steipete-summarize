@@ -1,6 +1,6 @@
 import type { Context, Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import type { Api } from "@earendil-works/pi-ai";
-import { completeSimple } from "@earendil-works/pi-ai";
+import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type { Attachment } from "../attachments.js";
 import type { OpenAiReasoningEffort } from "../model-options.js";
 import type { LlmTokenUsage } from "../types.js";
@@ -11,7 +11,6 @@ import {
   extractText,
   resolveBaseUrlOverride,
   throwIfAssistantMessageFailed,
-  tryGetModel,
 } from "./shared.js";
 
 function effortToThinkingLevel(
@@ -25,33 +24,46 @@ function effortToThinkingLevel(
  * Decide the model and `reasoning` option to pass into the pi-ai Anthropic
  * adapter. Shared by non-streaming and streaming text dispatch.
  *
- * pi-ai 0.75.5 enables extended thinking whenever the caller passes a
- * `reasoning` option, regardless of `model.reasoning`. So:
+ * pi-ai enables extended thinking whenever the caller passes a `reasoning`
+ * option (provided `model.reasoning` is true). So:
  *
  * - Registered models with `reasoning: true` (Claude 4+): forward `reasoning`.
+ *   Registered Claude 4.x models also carry `compat.forceAdaptiveThinking`, so
+ *   pi-ai emits the adaptive thinking form their backends expect.
  * - Registered models with `reasoning: false` (Claude 3 / 3.5): drop
  *   `reasoning` entirely; forwarding it would have pi-ai send a `thinking`
  *   block to an API that rejects it.
- * - Synthetic models (`tryGetModel` miss — typically custom
- *   `ANTHROPIC_BASE_URL` proxies in front of newer Claude versions):
- *   `createSyntheticModel` hard-codes `reasoning: false`, so we flip a copy
- *   to `reasoning: true` and forward the effort level.
+ * - Synthetic custom-gateway models (registry miss plus explicit
+ *   `ANTHROPIC_BASE_URL` in front of newer Claude versions):
+ *   `createSyntheticModel` hard-codes `reasoning: false` and sets no `compat`,
+ *   so we flip a copy to `reasoning: true` AND set
+ *   `compat.forceAdaptiveThinking`. Without the latter, pi-ai sends
+ *   `thinking: { type: "enabled", budget_tokens }`, which Anthropic-on-Bedrock
+ *   gateways reject (they require `thinking: { type: "adaptive" }` +
+ *   `output_config.effort`). Setting it makes the synthetic model emit the same
+ *   adaptive form that registered Claude 4.x models already do.
  */
 export function prepareAnthropicReasoning({
-  modelId,
   baseModel,
+  isSyntheticCustomGateway,
   reasoningEffort,
 }: {
-  modelId: string;
   baseModel: Model<Api>;
+  isSyntheticCustomGateway: boolean;
   reasoningEffort?: OpenAiReasoningEffort;
 }): { model: Model<Api>; reasoning?: ThinkingLevel } {
   const reasoning = effortToThinkingLevel(reasoningEffort);
   if (!reasoning) return { model: baseModel };
-  const isSynthetic = !tryGetModel("anthropic", modelId);
   if (!baseModel.reasoning) {
-    if (isSynthetic) {
-      return { model: { ...baseModel, reasoning: true }, reasoning };
+    if (isSyntheticCustomGateway) {
+      return {
+        model: {
+          ...baseModel,
+          reasoning: true,
+          compat: { ...baseModel.compat, forceAdaptiveThinking: true },
+        },
+        reasoning,
+      };
     }
     // Registered but flagged unsupported (e.g. Claude 3/3.5): drop reasoning
     // so pi-ai does not enable thinking on a model the API rejects it for.
@@ -124,12 +136,16 @@ export async function completeAnthropicText({
   signal: AbortSignal;
   anthropicBaseUrlOverride?: string | null;
 }): Promise<{ text: string; usage: LlmTokenUsage | null }> {
-  const baseModel = resolveAnthropicModel({
+  const { model: baseModel, isSyntheticCustomGateway } = resolveAnthropicModel({
     modelId,
     context,
     anthropicBaseUrlOverride,
   });
-  const { model, reasoning } = prepareAnthropicReasoning({ modelId, baseModel, reasoningEffort });
+  const { model, reasoning } = prepareAnthropicReasoning({
+    baseModel,
+    isSyntheticCustomGateway,
+    reasoningEffort,
+  });
   const result = await completeSimple(model, context, {
     ...(typeof temperature === "number" ? { temperature } : {}),
     ...(typeof maxOutputTokens === "number" ? { maxTokens: maxOutputTokens } : {}),
